@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export function SynthBgmButton({ volume }: { volume: number }) {
+export function SynthBgmButton({ audioUrl, volume }: { audioUrl?: string; volume: number }) {
   const [playing, setPlaying] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const audioRef = useRef<{
@@ -10,6 +10,7 @@ export function SynthBgmButton({ volume }: { volume: number }) {
     gain: GainNode;
     oscillators: OscillatorNode[];
   } | null>(null);
+  const mediaRef = useRef<HTMLAudioElement | null>(null);
   const volumeRef = useRef(volume);
 
   useEffect(() => {
@@ -17,9 +18,20 @@ export function SynthBgmButton({ volume }: { volume: number }) {
     if (audioRef.current) {
       audioRef.current.gain.gain.setTargetAtTime(volume / 1000, audioRef.current.context.currentTime, 0.08);
     }
+    if (mediaRef.current) {
+      mediaRef.current.volume = volume / 100;
+    }
   }, [volume]);
 
   const stop = useCallback(() => {
+    if (mediaRef.current) {
+      mediaRef.current.pause();
+      mediaRef.current.currentTime = 0;
+      mediaRef.current = null;
+      setPlaying(false);
+      return;
+    }
+
     const audio = audioRef.current;
     if (!audio) {
       setPlaying(false);
@@ -45,6 +57,21 @@ export function SynthBgmButton({ volume }: { volume: number }) {
   }, []);
 
   const start = useCallback(async () => {
+    if (audioUrl) {
+      if (mediaRef.current) {
+        return;
+      }
+
+      const media = new Audio(audioUrl);
+      media.loop = true;
+      media.volume = volumeRef.current / 100;
+      mediaRef.current = media;
+      await media.play();
+      setBlocked(false);
+      setPlaying(true);
+      return;
+    }
+
     if (audioRef.current) {
       return;
     }
@@ -73,7 +100,7 @@ export function SynthBgmButton({ volume }: { volume: number }) {
     audioRef.current = { context, gain, oscillators };
     setBlocked(false);
     setPlaying(true);
-  }, []);
+  }, [audioUrl]);
 
   useEffect(() => {
     start().catch(() => {

@@ -1,10 +1,17 @@
 export type ThemeKey = "sakura" | "morning" | "cream" | "blue";
 
 export type GiftDraft = {
+  id?: string;
   recipientName: string;
   title: string;
+  songSourceType: "upload" | "default";
   songTitle: string;
   artist: string;
+  audioUrl?: string;
+  backgroundImageUrl?: string;
+  backgroundPositionX: number;
+  backgroundPositionY: number;
+  backgroundScale: number;
   blessingText: string;
   blessingColor: string;
   blessingFontSize: number;
@@ -30,6 +37,7 @@ export const themes: Record<
     name: string;
     scene: string;
     wash: string;
+    mask: string;
     gradient: string;
     text: string;
     flower: string[];
@@ -39,6 +47,7 @@ export const themes: Record<
     name: "樱花粉",
     scene: "温柔、生日、表白",
     wash: "rgba(255, 238, 246, 0.66)",
+    mask: "rgba(248, 201, 216, 0.3)",
     gradient: "linear-gradient(160deg, #ffe7ef, #fff7fb 48%, #f8d7e1)",
     text: "#c7608a",
     flower: ["#f28caf", "#f7bfd2", "#df7fa5", "#f3a7bd"]
@@ -47,6 +56,7 @@ export const themes: Record<
     name: "晨光绿",
     scene: "治愈、陪伴、鼓励",
     wash: "rgba(237, 255, 242, 0.66)",
+    mask: "rgba(205, 235, 214, 0.3)",
     gradient: "linear-gradient(160deg, #e6f7d8, #fbfff7 48%, #cdebd6)",
     text: "#5f9d6d",
     flower: ["#8dd49c", "#bddf9c", "#72bd90", "#a7dcb4"]
@@ -55,6 +65,7 @@ export const themes: Record<
     name: "奶油黄",
     scene: "温暖、感谢、节日",
     wash: "rgba(255, 249, 223, 0.7)",
+    mask: "rgba(247, 230, 182, 0.3)",
     gradient: "linear-gradient(160deg, #fff0ba, #fffaf0 50%, #f8df9d)",
     text: "#c99542",
     flower: ["#f5c95f", "#ffe18a", "#efb95d", "#f8d27b"]
@@ -63,6 +74,7 @@ export const themes: Record<
     name: "淡雅蓝",
     scene: "安静、晚安、思念",
     wash: "rgba(237, 246, 255, 0.7)",
+    mask: "rgba(205, 223, 248, 0.3)",
     gradient: "linear-gradient(160deg, #e3efff, #fbfdff 50%, #cddff8)",
     text: "#6b8fc7",
     flower: ["#8fb5eb", "#b5cdf5", "#779cd8", "#a7c4ef"]
@@ -72,8 +84,14 @@ export const themes: Record<
 export const defaultGift: GiftDraft = {
   recipientName: "XX",
   title: "给XX的礼物",
+  songSourceType: "default",
   songTitle: "晨光花园",
   artist: "BloomBeat 默认 BGM",
+  audioUrl: undefined,
+  backgroundImageUrl: undefined,
+  backgroundPositionX: 50,
+  backgroundPositionY: 0,
+  backgroundScale: 100,
   blessingText: "愿今天的风和花，都把温柔送到你身边。",
   blessingColor: "#c7608a",
   blessingFontSize: 16,
@@ -118,5 +136,6 @@ export function saveDraft(nextDraft: Partial<GiftDraft>) {
 
   const current = getDraft();
   const merged = { ...current, ...nextDraft };
-  window.localStorage.setItem(storageKey, JSON.stringify(merged));
+  const { audioUrl, backgroundImageUrl, ...lightDraft } = merged;
+  window.localStorage.setItem(storageKey, JSON.stringify(lightDraft));
 }

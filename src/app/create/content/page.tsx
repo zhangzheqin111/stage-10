@@ -4,12 +4,16 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { GiftDraft, getDraft, normalizeBlessing, normalizeRecipientName, saveDraft, themes, ThemeKey } from "@/lib/gift";
+import { fileToDataUrl, getLocalDraft, saveLocalDraft } from "@/lib/localGiftStore";
 
 export default function ContentPage() {
   const [draft, setDraft] = useState<GiftDraft>(getDraft());
+  const [imageMessage, setImageMessage] = useState("");
 
   useEffect(() => {
-    setDraft(getDraft());
+    getLocalDraft()
+      .then((savedDraft) => setDraft(savedDraft ?? getDraft()))
+      .catch(() => setDraft(getDraft()));
   }, []);
 
   function update(next: Partial<GiftDraft>) {
@@ -23,6 +27,27 @@ export default function ContentPage() {
     }
     setDraft(merged);
     saveDraft(merged);
+    saveLocalDraft(merged);
+  }
+
+  async function handleImageUpload(file?: File) {
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setImageMessage("请上传图片文件。");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setImageMessage("图片超过 5MB，请压缩后再上传。");
+      return;
+    }
+
+    const backgroundImageUrl = await fileToDataUrl(file);
+    update({ backgroundImageUrl, backgroundPositionX: 50, backgroundPositionY: 0, backgroundScale: 100 });
+    setImageMessage("背景图片已保存到礼物草稿。");
   }
 
   return (
@@ -56,6 +81,88 @@ export default function ContentPage() {
               value={draft.blessingText}
             />
             <p className="hint">{draft.blessingText.length} / 50 字</p>
+          </div>
+
+          <div className="field">
+            <label>背景图片</label>
+            <input
+              className="input"
+              accept="image/*"
+              onChange={(event) => handleImageUpload(event.target.files?.[0])}
+              type="file"
+            />
+            <p className="hint">可上传 5MB 以内图片；不上传时默认为纯色主题背景。</p>
+            {imageMessage ? <p className="hint">{imageMessage}</p> : null}
+            <div className="image-crop-control">
+              <div
+                className={`image-crop-preview ${draft.backgroundImageUrl ? "" : "empty"}`}
+                style={{
+                  backgroundImage: draft.backgroundImageUrl ? `url(${draft.backgroundImageUrl})` : undefined,
+                  backgroundPosition: `${draft.backgroundPositionX}% ${draft.backgroundPositionY}%`,
+                  backgroundSize: `auto ${draft.backgroundScale}%`
+                }}
+              >
+                {!draft.backgroundImageUrl ? <span>背景预览</span> : null}
+              </div>
+              {draft.backgroundImageUrl ? (
+                <>
+                <label>
+                  左右位置：{draft.backgroundPositionX}%
+                  <input
+                    className="range"
+                    max={100}
+                    min={0}
+                    onChange={(event) => update({ backgroundPositionX: Number(event.target.value) })}
+                    type="range"
+                    value={draft.backgroundPositionX}
+                  />
+                </label>
+                <label>
+                  上下位置：{draft.backgroundScale === 100 ? 0 : draft.backgroundPositionY}%
+                  <input
+                    className="range"
+                    disabled={draft.backgroundScale === 100}
+                    max={100}
+                    min={0}
+                    onChange={(event) => update({ backgroundPositionY: Number(event.target.value) })}
+                    type="range"
+                    value={draft.backgroundScale === 100 ? 0 : draft.backgroundPositionY}
+                  />
+                </label>
+                <label>
+                  Zoom in：{draft.backgroundScale - 100}%
+                  <input
+                    className="range"
+                    max={220}
+                    min={100}
+                    onChange={(event) => {
+                      const nextScale = Number(event.target.value);
+                      update({
+                        backgroundScale: nextScale,
+                        backgroundPositionY: nextScale === 100 ? 0 : draft.backgroundPositionY
+                      });
+                    }}
+                    type="range"
+                    value={draft.backgroundScale}
+                  />
+                </label>
+                <button
+                  className="secondary-btn"
+                  onClick={() =>
+                    update({
+                      backgroundImageUrl: undefined,
+                      backgroundPositionX: 50,
+                      backgroundPositionY: 0,
+                      backgroundScale: 100
+                    })
+                  }
+                  type="button"
+                >
+                  使用纯色主题背景
+                </button>
+                </>
+              ) : null}
+            </div>
           </div>
 
           <div className="field">

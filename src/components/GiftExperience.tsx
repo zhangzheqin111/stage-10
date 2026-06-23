@@ -1,6 +1,7 @@
 "use client";
 
 import { PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { GiftDraft, GestureState, themes } from "@/lib/gift";
 import { SynthBgmButton } from "./SynthBgmButton";
 
@@ -26,14 +27,20 @@ const plants = [
   { x: 154, scale: 0.55, heightOffset: -70, delay: -1.8, sway: 3.6, wind: 0.76 }
 ];
 
-export function GiftExperience({ gift }: { gift: GiftDraft }) {
+function calculateVolume(plantHeight: number, windPower: number) {
+  const heightVolume = plantHeight * 0.72;
+  const horizontalVolume = (windPower - 50) * 0.56;
+  return Math.max(0, Math.min(100, Math.round(18 + heightVolume + horizontalVolume)));
+}
+
+export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode; gift: GiftDraft }) {
   const [showGuide, setShowGuide] = useState(true);
   const [gesture, setGesture] = useState<GestureState>({
     mode: "touch",
     type: "none",
     windPower: 18,
     plantHeight: 62,
-    volume: 58,
+    volume: calculateVolume(62, 18),
     flowerOpen: true,
     flowerColorIndex: 0
   });
@@ -101,12 +108,19 @@ export function GiftExperience({ gift }: { gift: GiftDraft }) {
     if (absY > 8 && absY >= absX * 0.72) {
       movedRef.current = true;
       const nextHeight = Math.max(0, Math.min(100, start.height - Math.round(dy / 1.35)));
-      updateGesture({ type: "vertical_wave", plantHeight: nextHeight });
+      updateGesture({
+        type: "vertical_wave",
+        plantHeight: nextHeight,
+        volume: calculateVolume(nextHeight, gesture.windPower)
+      });
     } else if (absX > 8 && absX > absY * 0.72) {
       movedRef.current = true;
       const nextWind = Math.max(0, Math.min(100, start.wind + Math.round(dx / 1.8)));
-      const nextVolume = Math.max(0, Math.min(100, start.volume + Math.round(dx / 2.4)));
-      updateGesture({ type: "horizontal_wave", windPower: nextWind, volume: nextVolume });
+      updateGesture({
+        type: "horizontal_wave",
+        windPower: nextWind,
+        volume: calculateVolume(gesture.plantHeight, nextWind)
+      });
     }
   }
 
@@ -146,6 +160,7 @@ export function GiftExperience({ gift }: { gift: GiftDraft }) {
       style={
         {
           "--theme-wash": theme.wash,
+          "--image-wash": gift.backgroundImageUrl ? theme.mask : theme.wash,
           "--flower-scale": gesture.flowerOpen ? 1 : 0.74,
           "--flower-color": flowerColor,
           "--wind-shift": `${gesture.windPower - 35}px`,
@@ -153,7 +168,15 @@ export function GiftExperience({ gift }: { gift: GiftDraft }) {
         } as React.CSSProperties
       }
     >
-      <div className="gift-bg" style={{ background: theme.gradient }} />
+      <div
+        className="gift-bg"
+        style={{
+          backgroundImage: gift.backgroundImageUrl ? `url(${gift.backgroundImageUrl})` : theme.gradient,
+          backgroundPosition: `${gift.backgroundPositionX ?? 50}% ${gift.backgroundPositionY ?? 50}%`,
+          backgroundSize: gift.backgroundImageUrl ? `auto ${gift.backgroundScale ?? 100}%` : "cover",
+          backgroundRepeat: "no-repeat"
+        }}
+      />
       <div className="wind-layer" aria-hidden="true">
         <span />
         <span />
@@ -167,7 +190,13 @@ export function GiftExperience({ gift }: { gift: GiftDraft }) {
             <button
               className="reset-wind-btn"
               onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => updateGesture({ type: "horizontal_wave", windPower: 50, volume: 58 })}
+              onClick={() =>
+                updateGesture({
+                  type: "horizontal_wave",
+                  windPower: 50,
+                  volume: calculateVolume(gesture.plantHeight, 50)
+                })
+              }
               type="button"
               aria-label="回到微风"
               title="回到微风"
@@ -283,8 +312,20 @@ export function GiftExperience({ gift }: { gift: GiftDraft }) {
         onPointerUp={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
-        <SynthBgmButton volume={gesture.volume} />
+        <SynthBgmButton audioUrl={gift.audioUrl} volume={gesture.volume} />
       </div>
+
+      {actionRight ? (
+        <div
+          className="gift-action-right"
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerMove={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {actionRight}
+        </div>
+      ) : null}
 
       {showGuide ? (
         <div className="guide-overlay" onPointerDown={(event) => event.stopPropagation()}>
@@ -292,8 +333,8 @@ export function GiftExperience({ gift }: { gift: GiftDraft }) {
             <strong>用触摸唤醒这片花园</strong>
             <p className="hint">阶段 1 使用触摸交互，后续阶段会加入摄像头手势。</p>
             <div className="guide-grid">
-              <GuideItem icon="↕" title="上下滑动" text="植物长高或变矮" />
-              <GuideItem icon="↔" title="左右滑动" text="改变音量和风力" />
+              <GuideItem icon="↕" title="上下滑动" text="越高声音越大，越矮声音越小" />
+              <GuideItem icon="↔" title="左右滑动" text="越靠左声音越小，越靠右声音越大" />
               <GuideItem icon="◌" title="点击花朵" text="开放或闭合" />
               <GuideItem icon="✦" title="双击屏幕" text="整片花园统一换色" />
             </div>

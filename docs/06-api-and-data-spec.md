@@ -112,6 +112,27 @@ GET  /api/gifts/[id]
 POST /api/upload
 ```
 
+## 阶段 5 前端体验状态
+
+阶段 5 当前没有新增服务端 API 或 Gift 数据字段，主要是前端体验层增强。
+
+新增工具：
+
+```txt
+src/lib/clipboard.ts
+```
+
+- `copyTextToClipboard(text: string): Promise<boolean>`
+- 优先使用 `navigator.clipboard.writeText`。
+- 失败时回退到隐藏 textarea + `document.execCommand("copy")`。
+- 返回 `true` 表示复制成功，返回 `false` 表示复制失败，调用方负责显示用户提示。
+
+加载状态：
+
+- `/create/preview` 草稿读取前显示 `正在整理礼物预览`。
+- `/gift/[id]` 礼物读取前显示 `正在打开这份礼物`。
+- 两个加载提示最短可见约 720ms，只影响视觉提示，不改变数据读取、分享生成或礼物渲染流程。
+
 ## 阶段 3 音乐 API 技术路线
 
 当前阶段先使用本地 mock 音乐能力，不直接依赖真实 QQ 音乐 / 酷狗 API。选歌页已经固定为四种互斥方式：链接识别、歌曲推荐、上传本地音频、系统 BGM。后续接入真实服务时，建议保持以下适配层形状：

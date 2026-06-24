@@ -86,6 +86,12 @@ type ParseMusicLinkResult =
 - 系统 BGM 编辑建议先落在本地合成参数上，例如音色、速度、音高组合、情绪 preset；确认体验稳定后再考虑保存为 Gift 字段。
 - 所有音乐来源保持排他选择，最终 Gift 只保存用户最后明确选中的一首背景音乐。
 
+当前实现状态：
+
+- 已新增 `POST /api/music/parse-link`，内部调用 `parseMockMusicLink`，成功时返回 mock track，失败时返回明确提示和 `fallback: "search"`。
+- 已新增 `POST /api/music/search`，内部调用 `searchMockMusic`，最多返回 3 首内置推荐，并保留系统 BGM 兜底提示。
+- 选歌页优先调用上述 API；接口不可用时自动回退到本地 mock 函数，避免破坏四方式选歌主流程。
+
 ## 阶段 2 Supabase 云端分享
 
 ### 环境变量

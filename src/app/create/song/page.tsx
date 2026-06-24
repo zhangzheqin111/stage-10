@@ -9,6 +9,10 @@ import { getDraft, saveDraft } from "@/lib/gift";
 import { fileToDataUrl, getLocalDraft, saveLocalDraft } from "@/lib/localGiftStore";
 import { MockMusicTrack, parseMockMusicLink, searchMockMusic } from "@/lib/mockMusic";
 
+type ParseMusicLinkResult =
+  | { ok: true; track: MockMusicTrack; message: string }
+  | { ok: false; message: string };
+
 const bgms = [
   { title: "晨光花园", artist: "BloomBeat 系统 BGM", mood: "轻柔、明亮", notes: [261.63, 329.63, 392] },
   { title: "晚风信笺", artist: "BloomBeat 系统 BGM", mood: "安静、温柔", notes: [220, 293.66, 349.23] },
@@ -16,6 +20,48 @@ const bgms = [
 ];
 
 const previewDurationMs = 10000;
+
+async function parseMusicLink(url: string): Promise<ParseMusicLinkResult> {
+  try {
+    const response = await fetch("/api/music/parse-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    const data = (await response.json()) as ParseMusicLinkResult;
+
+    if (response.ok && data.ok) {
+      return data;
+    }
+
+    return {
+      ok: false,
+      message: !data.ok ? data.message : "链接暂时解析失败，可以继续选择推荐、上传音频或系统 BGM。"
+    };
+  } catch {
+    const fallback = parseMockMusicLink(url);
+    return fallback.ok ? { ok: true, track: fallback.track, message: fallback.message } : fallback;
+  }
+}
+
+async function searchMusic(keyword: string) {
+  try {
+    const response = await fetch("/api/music/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keyword })
+    });
+    const data = (await response.json()) as { tracks?: MockMusicTrack[] };
+
+    if (response.ok && Array.isArray(data.tracks)) {
+      return data.tracks.slice(0, 3);
+    }
+  } catch {
+    // Fall through to local mock data so the song flow always has a usable path.
+  }
+
+  return searchMockMusic(keyword).slice(0, 3);
+}
 
 export default function SongPage() {
   const router = useRouter();
@@ -211,7 +257,7 @@ export default function SongPage() {
   }
 
   async function handleParseLink() {
-    const result = parseMockMusicLink(linkValue);
+    const result = await parseMusicLink(linkValue);
     setLinkMessage(result.message);
 
     if (!result.ok) {
@@ -232,7 +278,7 @@ export default function SongPage() {
       return;
     }
 
-    setRecommendations(searchMockMusic(normalized).slice(0, 3));
+    searchMusic(normalized).then(setRecommendations);
   }
 
   async function handleAudioUpload(file?: File) {

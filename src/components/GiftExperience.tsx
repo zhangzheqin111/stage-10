@@ -32,6 +32,15 @@ const plants = [
 const handLandmarkerModelUrl =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 const visionWasmUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
+type CameraStage = "idle" | "requesting" | "tracking-loading" | "tracking-ready" | "touch-fallback";
+
+const cameraStageLabel: Record<CameraStage, string> = {
+  idle: "未开启",
+  requesting: "请求权限",
+  "tracking-loading": "准备识别",
+  "tracking-ready": "实时识别",
+  "touch-fallback": "触摸兜底"
+};
 
 function calculateVolume(plantHeight: number, windPower: number) {
   const heightVolume = plantHeight * 0.72;
@@ -283,6 +292,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
   const [cameraStarting, setCameraStarting] = useState(false);
   const [handTrackingReady, setHandTrackingReady] = useState(false);
   const [hasCameraAccess, setHasCameraAccess] = useState(false);
+  const [cameraStage, setCameraStage] = useState<CameraStage>("idle");
   const [gesture, setGesture] = useState<GestureState>({
     mode: "touch",
     type: "none",
@@ -408,8 +418,27 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     setGuideMode("touch");
     setHandTrackingReady(false);
     setCameraStarting(false);
+    setCameraStage("touch-fallback");
     setCameraMessage(message);
     updateGesture({ mode: "touch", type: "none" });
+  }
+
+  function getCameraErrorMessage(error: unknown) {
+    if (error instanceof DOMException) {
+      if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+        return "摄像头权限被拒绝或当前页面不允许访问摄像头，已自动切换为触摸模式。";
+      }
+
+      if (error.name === "NotFoundError" || error.name === "OverconstrainedError") {
+        return "没有找到可用摄像头，已自动切换为触摸模式。";
+      }
+
+      if (error.name === "NotReadableError" || error.name === "AbortError") {
+        return "摄像头可能正被其他应用占用，已自动切换为触摸模式。";
+      }
+    }
+
+    return "摄像头开启失败，已自动切换为触摸模式。";
   }
 
   function openCurrentGuide() {
@@ -690,6 +719,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       setGuideMode("touch");
       updateGesture({ mode: "touch", type: "none" });
       setHasCameraAccess(false);
+      setCameraStage("touch-fallback");
       return;
     }
 
@@ -698,6 +728,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     lastCameraControlRef.current = { height: gesture.plantHeight, wind: gesture.windPower, time: 0 };
     cameraHeightOriginRef.current = null;
     fusionModeRef.current = { mode: "primary", streak: 0 };
+    setCameraStage("requesting");
     setCameraMessage("正在启动摄像头...");
 
     try {
@@ -708,12 +739,14 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       setHasCameraAccess(true);
       updateGesture({ mode: "camera", type: "none" });
       setGuideMode("camera");
+      setCameraStage("tracking-loading");
       setCameraMessage("摄像头已开启，正在准备手势识别...");
       setCameraStarting(false);
 
       try {
         await ensureHandLandmarker();
         setHandTrackingReady(true);
+        setCameraStage("tracking-ready");
         setCameraMessage("手势识别已开启；画面仅在本机实时识别，不保存、不上传。");
         window.setTimeout(startHandDetection, 0);
       } catch {
@@ -722,18 +755,20 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         cameraStreamRef.current = null;
         setGuideMode("touch");
         setHandTrackingReady(false);
+        setCameraStage("touch-fallback");
         updateGesture({ mode: "touch", type: "none" });
-        setCameraMessage("手势识别准备失败，已自动保持触摸模式。你仍可以用下面的触摸方式完成互动和分享。");
+        setCameraMessage("手势识别资源加载失败，已自动切换为触摸模式。你仍可以用下面的触摸方式完成互动和分享。");
       }
-    } catch {
+    } catch (error) {
       stopHandDetection();
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
       cameraStreamRef.current = null;
       setGuideMode("touch");
       setHandTrackingReady(false);
       setHasCameraAccess(false);
+      setCameraStage("touch-fallback");
       updateGesture({ mode: "touch", type: "none" });
-      setCameraMessage("摄像头或手势识别开启失败，已自动保持触摸模式。你仍可以用下面的触摸方式完成互动和分享。");
+      setCameraMessage(`${getCameraErrorMessage(error)}你仍可以用下面的触摸方式完成互动和分享。`);
     } finally {
       setCameraStarting(false);
     }
@@ -872,6 +907,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
             </button>
           </p>
           <p>模式 {gesture.mode === "camera" ? "摄像头" : "触摸"}</p>
+          <p>摄像头 {cameraStageLabel[cameraStage]}</p>
           <p>高度 {gesture.plantHeight}</p>
           <p>手势 {gestureLabel[gesture.type]}</p>
         </div>
@@ -1020,9 +1056,12 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
                 <div className="camera-live-panel">
                   <video ref={guideVideoRef} muted playsInline aria-label="摄像头实时预览" />
                   <canvas ref={guideCanvasRef} aria-hidden="true" />
-                  <span>摄像头实时预览</span>
+                  <span>{handTrackingReady ? "手势识别中" : cameraStageLabel[cameraStage]}</span>
                 </div>
               ) : null}
+              <div className={`camera-status-pill ${cameraStage}`}>
+                摄像头状态：{cameraStageLabel[cameraStage]}
+              </div>
               {showInitialCameraGuide ? (
                 <button
                   className="primary-btn guide-camera-btn"

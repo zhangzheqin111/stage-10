@@ -24,7 +24,7 @@ export type GiftDraft = {
 };
 
 export type GestureState = {
-  mode: "touch";
+  mode: "camera" | "touch";
   type: "none" | "vertical_wave" | "horizontal_wave" | "open_hand" | "fist" | "clap";
   windPower: number;
   plantHeight: number;

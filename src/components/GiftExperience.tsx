@@ -36,6 +36,9 @@ function calculateVolume(plantHeight: number, windPower: number) {
 
 export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode; gift: GiftDraft }) {
   const [showGuide, setShowGuide] = useState(true);
+  const [cameraMessage, setCameraMessage] = useState("");
+  const [guideMode, setGuideMode] = useState<GestureState["mode"]>("touch");
+  const [cameraStarting, setCameraStarting] = useState(false);
   const [gesture, setGesture] = useState<GestureState>({
     mode: "touch",
     type: "none",
@@ -50,6 +53,9 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
   const lastTapRef = useRef(0);
   const tapTimerRef = useRef<number | null>(null);
   const movedRef = useRef(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const guideVideoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
 
   const theme = themes[gift.theme];
   const windOffset = gesture.windPower - 50;
@@ -68,6 +74,29 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     setFlowerColor(theme.flower[0]);
   }, [theme.flower]);
 
+  useEffect(
+    () => () => {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+    },
+    []
+  );
+
+  useEffect(() => {
+    const stream = cameraStreamRef.current;
+    if (!stream || gesture.mode !== "camera") {
+      return;
+    }
+
+    [videoRef.current, guideVideoRef.current].forEach((video) => {
+      if (!video) {
+        return;
+      }
+      video.srcObject = stream;
+      video.play().catch(() => undefined);
+    });
+  }, [gesture.mode, guideMode, showGuide]);
+
   function updateGesture(next: Partial<GestureState>) {
     setGesture((current) => ({ ...current, ...next }));
   }
@@ -77,6 +106,58 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     const nextColor = options[Math.floor(Math.random() * options.length)] ?? theme.flower[0];
     setFlowerColor(nextColor);
     updateGesture({ type: "clap", flowerColorIndex: gesture.flowerColorIndex + 1 });
+  }
+
+  async function requestCameraStream() {
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: "user" },
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        }
+      });
+    } catch {
+      return navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: true
+      });
+    }
+  }
+
+  async function enableCameraGesture() {
+    if (cameraStarting) {
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraMessage("当前浏览器不支持摄像头访问，已自动使用触摸模式。");
+      setGuideMode("touch");
+      updateGesture({ mode: "touch", type: "none" });
+      return;
+    }
+
+    setCameraStarting(true);
+    setCameraMessage("正在启动摄像头...");
+
+    try {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      const stream = await requestCameraStream();
+
+      cameraStreamRef.current = stream;
+      updateGesture({ mode: "camera", type: "none" });
+      setGuideMode("camera");
+      setCameraMessage("摄像头已开启，当前进入手势模式；画面仅在本机实时识别，不保存、不上传。");
+    } catch {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+      setGuideMode("touch");
+      updateGesture({ mode: "touch", type: "none" });
+      setCameraMessage("摄像头开启失败，已自动保持触摸模式。你仍可以用下面的触摸方式完成互动和分享。");
+    } finally {
+      setCameraStarting(false);
+    }
   }
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -170,6 +251,13 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         <span />
         <span />
       </div>
+      <video
+        ref={videoRef}
+        className={`camera-input ${gesture.mode === "camera" ? "visible" : ""}`}
+        muted
+        playsInline
+        aria-label="摄像头实时预览"
+      />
 
       <div className="data-panel">
         <div>
@@ -192,6 +280,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
               ↻
             </button>
           </p>
+          <p>模式 {gesture.mode === "camera" ? "摄像头" : "触摸"}</p>
           <p>高度 {gesture.plantHeight}</p>
           <p>手势 {gestureLabel[gesture.type]}</p>
         </div>
@@ -318,18 +407,55 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       {showGuide ? (
         <div className="guide-overlay" onPointerDown={(event) => event.stopPropagation()}>
           <div className="guide-card">
-            <strong>用触摸唤醒这片花园</strong>
-            <p className="hint">阶段 1 使用触摸交互，后续阶段会加入摄像头手势。</p>
-            <div className="guide-grid">
-              <GuideItem icon="↕" title="上下滑动" text="越高声音越大，越矮声音越小" />
-              <GuideItem icon="↔" title="左右滑动" text="越靠左声音越小，越靠右声音越大" />
-              <GuideItem icon="◌" title="点击花朵" text="开放或闭合" />
-              <GuideItem icon="✦" title="双击屏幕" text="整片花园统一换色" />
-            </div>
+            <section className="guide-section primary-guide">
+              <strong>舞动双手，唤醒这片花园</strong>
+              {guideMode === "camera" ? (
+                <div className="camera-live-panel">
+                  <video ref={guideVideoRef} muted playsInline aria-label="摄像头实时预览" />
+                  <span>摄像头实时预览</span>
+                </div>
+              ) : null}
+              {guideMode === "touch" ? (
+                <button
+                  className="primary-btn guide-camera-btn"
+                  disabled={cameraStarting}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    enableCameraGesture();
+                  }}
+                  type="button"
+                >
+                  {cameraStarting ? "正在启动摄像头..." : "点击启动摄像头"}
+                </button>
+              ) : null}
+              {guideMode === "camera" ? (
+                <div className="guide-grid camera-guide-grid">
+                  <GuideItem icon="↕" title="手掌上下摆动" text="花朵长高变矮" />
+                  <GuideItem icon="↔" title="手掌左右摇晃" text="花朵左右摇晃" />
+                  <GuideItem icon="开" title="张开五指并拢双拳" text="花朵张开闭合" />
+                  <GuideItem icon="捏" title="拇指与食指孔雀形状捏合" text="颜色切换" />
+                </div>
+              ) : null}
+              {cameraMessage ? <p className="hint">{cameraMessage}</p> : null}
+            </section>
+
+            <section className="guide-section fallback-guide">
+              <strong>如果无法唤起摄像头，你可以按照下列方式触摸屏幕，完成交互。</strong>
+              <div className="guide-grid">
+                <GuideItem icon="↕" title="上下滑动" text="越高声音越大，越矮声音越小" />
+                <GuideItem icon="↔" title="左右滑动" text="越靠左声音越小，越靠右声音越大" />
+                <GuideItem icon="◌" title="点击花朵" text="开放或闭合" />
+                <GuideItem icon="✦" title="双击屏幕" text="整片花园统一换色" />
+              </div>
+            </section>
             <button
               className="primary-btn"
               onClick={(event) => {
                 event.stopPropagation();
+                if (gesture.mode !== "camera") {
+                  updateGesture({ mode: "touch", type: "none" });
+                }
                 setShowGuide(false);
               }}
               type="button"

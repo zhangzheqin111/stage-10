@@ -47,6 +47,28 @@ type GestureState = {
 };
 ```
 
+## 阶段 4-1 摄像头与手势引导
+
+当前阶段 4-1 只处理摄像头授权、实时预览、模式状态和触摸兜底，不保存摄像头画面，也不上传摄像头画面。
+
+当前实现策略：
+
+- 交互核心在 `src/components/GiftExperience.tsx`。
+- 摄像头模式只保存在组件内存状态和 `GestureState.mode` 中，不写入 `GiftDraft`。
+- 点击 `点击启动摄像头` 后才调用 `navigator.mediaDevices.getUserMedia`。
+- 摄像头请求只请求 video，不请求 audio。
+- 先请求前置摄像头，失败后降级请求任意可用摄像头。
+- 成功后把 `MediaStream` 保存到组件 ref，并绑定到页面内 `<video>` 预览。
+- 组件卸载时停止所有 camera tracks。
+- 摄像头失败或用户拒绝权限时，回到 `mode: "touch"`，触摸交互继续可用。
+- 当前摄像头手势教学为 4 个板块：
+  - `手掌上下摆动` -> 花朵长高变矮。
+  - `手掌左右摇晃` -> 花朵左右摇晃。
+  - `张开五指并拢双拳` -> 花朵张开闭合。
+  - `拇指与食指孔雀形状捏合` -> 颜色切换。
+
+后续接入 MediaPipe Hands 时，建议将识别结果映射为现有 `GestureState.type`、`plantHeight`、`windPower`、`flowerOpen`、`flowerColorIndex`，避免新增与触摸模式重复的交互状态。
+
 ## API
 
 ```txt

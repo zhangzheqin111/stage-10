@@ -586,6 +586,27 @@ button {
   animation-delay: -2.1s;
 }
 
+.camera-input {
+  position: absolute;
+  right: 14px;
+  top: 58px;
+  z-index: 10;
+  width: 118px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 8px;
+  background: rgba(67, 52, 60, 0.2);
+  box-shadow: 0 12px 26px rgba(91, 72, 86, 0.13);
+  transform: scaleX(-1);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.camera-input.visible {
+  opacity: 1;
+}
+
 @keyframes windRipple {
   from {
     transform: translateX(-12%) scaleX(0.96);
@@ -1089,6 +1110,17 @@ button {
 
 .guide-card {
   width: min(100%, 340px);
+  display: grid;
+  gap: 12px;
+  max-height: calc(100dvh - 70px);
+  overflow-y: auto;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.guide-section {
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.92);
   border-radius: 8px;
@@ -1096,11 +1128,49 @@ button {
   box-shadow: var(--shadow);
 }
 
+.guide-camera-btn {
+  width: 100%;
+  margin-top: 12px;
+}
+
 .guide-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin: 12px 0 16px;
+}
+
+.camera-guide-grid {
+  margin-bottom: 0;
+}
+
+.camera-live-panel {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  margin-top: 12px;
+  border-radius: 8px;
+  background: rgba(67, 52, 60, 0.16);
+  border: 1px solid rgba(67, 52, 60, 0.1);
+}
+
+.camera-live-panel video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  display: block;
+}
+
+.camera-live-panel span {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: rgba(67, 52, 60, 0.78);
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
 }
 
 .guide-item {

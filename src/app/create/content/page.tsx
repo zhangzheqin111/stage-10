@@ -1,36 +1,50 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { GiftBackground } from "@/components/GiftBackground";
+import { consumePreserveEdit, isReloadNavigation, shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
 import { GiftDraft, getDraft, normalizeBlessing, normalizeRecipientName, saveDraft, themes, ThemeKey } from "@/lib/gift";
 import { fileToDataUrl, getLocalDraft, saveLocalDraft } from "@/lib/localGiftStore";
 
 const blessingColorSwatches = ["#c7608a", "#5f9d6d", "#c99542", "#6b8fc7", "#ffffff", "#43343c"];
 
 export default function ContentPage() {
+  const router = useRouter();
   const [draft, setDraft] = useState<GiftDraft>(getDraft());
   const [imageMessage, setImageMessage] = useState("");
   const [colorMessage, setColorMessage] = useState("");
   const colorInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    if (shouldStartFromGuide()) {
+      router.replace("/");
+      return;
+    }
+
     getLocalDraft()
       .then((savedDraft) => {
-        const nextDraft = {
-          ...((savedDraft ?? getDraft()) as GiftDraft),
-          backgroundImageUrl: undefined,
-          backgroundPositionX: 50,
-          backgroundPositionY: 0,
-          backgroundScale: 100
-        };
+        const baseDraft = (savedDraft ?? getDraft()) as GiftDraft;
+        const shouldPreserveEdit = consumePreserveEdit();
+        const shouldClearMedia = isReloadNavigation() && !shouldPreserveEdit;
+        const nextDraft = shouldClearMedia
+          ? {
+              ...baseDraft,
+              audioUrl: undefined,
+              backgroundImageUrl: undefined,
+              backgroundPositionX: 50,
+              backgroundPositionY: 0,
+              backgroundScale: 100
+            }
+          : baseDraft;
         setDraft(nextDraft);
         saveDraft(nextDraft);
         saveLocalDraft(nextDraft);
       })
       .catch(() => setDraft(getDraft()));
-  }, []);
+  }, [router]);
 
   function update(next: Partial<GiftDraft>) {
     const merged = { ...draft, ...next };
@@ -41,6 +55,7 @@ export default function ContentPage() {
     if (next.blessingText !== undefined) {
       merged.blessingText = normalizeBlessing(next.blessingText);
     }
+    startCreationFlow();
     setDraft(merged);
     saveDraft(merged);
     saveLocalDraft(merged);
@@ -72,20 +87,20 @@ export default function ContentPage() {
         <AppHeader step="2 / 3 礼物内容" />
         <section className="section soft-card stack">
           <div>
-            <h1>写给 TA 的花律</h1>
-            <p className="lead">称呼、祝福和主题会一起组成礼物页的第一眼。</p>
+            <h1>花之物语：把心声装进礼物</h1>
+            <p className="lead">创造你的个性化礼物</p>
           </div>
 
           <div className="field">
-            <label>对方称呼</label>
+            <label>心里的TA（对方称呼）</label>
             <input
               className="input"
               maxLength={15}
               onChange={(event) => update({ recipientName: event.target.value })}
-              placeholder="XX"
+              placeholder="TA"
               value={draft.recipientName}
             />
-            <p className="hint">最多 15 字，不填时默认为 XX。</p>
+            <p className="hint">最多15字，不填时默认为TA。</p>
           </div>
 
           <div className="field">

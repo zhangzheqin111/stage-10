@@ -1,24 +1,50 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { GiftExperience } from "@/components/GiftExperience";
 import { saveCloudGift } from "@/lib/cloudGiftStore";
+import { isReloadNavigation, shouldStartFromGuide } from "@/lib/creationFlow";
 import { GiftDraft, getDraft } from "@/lib/gift";
-import { createGiftId, getLocalDraft, saveLocalGift } from "@/lib/localGiftStore";
+import { createGiftId, getLocalDraft, saveLocalDraft, saveLocalGift } from "@/lib/localGiftStore";
 
 export default function PreviewPage() {
+  const router = useRouter();
   const [draft, setDraft] = useState<GiftDraft | null>(null);
   const [shareUrl, setShareUrl] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
+    if (shouldStartFromGuide()) {
+      router.replace("/");
+      return;
+    }
+
     getLocalDraft()
-      .then((savedDraft) => setDraft(savedDraft ?? getDraft()))
+      .then((savedDraft) => {
+        const baseDraft = savedDraft ?? getDraft();
+        const nextDraft = isReloadNavigation()
+          ? {
+              ...baseDraft,
+              audioUrl: undefined,
+              backgroundImageUrl: undefined,
+              backgroundPositionX: 50,
+              backgroundPositionY: 0,
+              backgroundScale: 100
+            }
+          : baseDraft;
+
+        if (isReloadNavigation()) {
+          saveLocalDraft(nextDraft);
+        }
+
+        setDraft(nextDraft);
+      })
       .catch(() => setDraft(getDraft()));
-  }, []);
+  }, [router]);
 
   if (!draft) {
     return null;

@@ -68,11 +68,6 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     setFlowerColor(theme.flower[0]);
   }, [theme.flower]);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => setShowGuide(false), 3000);
-    return () => window.clearTimeout(timer);
-  }, []);
-
   function updateGesture(next: Partial<GestureState>) {
     setGesture((current) => ({ ...current, ...next }));
   }
@@ -305,7 +300,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         onPointerUp={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
-        <SynthBgmButton audioUrl={gift.audioUrl} volume={gesture.volume} />
+        <SynthBgmButton audioUrl={gift.audioUrl} autoStart={!showGuide} volume={gesture.volume} />
       </div>
 
       {actionRight ? (
@@ -331,7 +326,14 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
               <GuideItem icon="◌" title="点击花朵" text="开放或闭合" />
               <GuideItem icon="✦" title="双击屏幕" text="整片花园统一换色" />
             </div>
-            <button className="primary-btn" onClick={() => setShowGuide(false)} type="button">
+            <button
+              className="primary-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowGuide(false);
+              }}
+              type="button"
+            >
               我知道了
             </button>
           </div>

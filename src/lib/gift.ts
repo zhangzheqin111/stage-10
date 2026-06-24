@@ -4,7 +4,8 @@ export type GiftDraft = {
   id?: string;
   recipientName: string;
   title: string;
-  songSourceType: "upload" | "default";
+  songSourceType: "upload" | "default" | "link" | "recommendation";
+  musicSelected?: boolean;
   songTitle: string;
   artist: string;
   audioUrl?: string;
@@ -83,9 +84,10 @@ export const themes: Record<
 };
 
 export const defaultGift: GiftDraft = {
-  recipientName: "XX",
-  title: "给XX的礼物",
+  recipientName: "TA",
+  title: "给TA的礼物",
   songSourceType: "default",
+  musicSelected: false,
   songTitle: "晨光花园",
   artist: "BloomBeat 默认 BGM",
   audioUrl: undefined,
@@ -106,7 +108,7 @@ const storageKey = "bloombeat-draft";
 
 export function normalizeRecipientName(value: string) {
   const trimmed = value.trim().slice(0, 15);
-  return trimmed || "XX";
+  return trimmed || "TA";
 }
 
 export function normalizeBlessing(value: string) {

@@ -8,12 +8,13 @@ type Gift = {
   recipientName: string;
   title: string;
 
-  songSourceType: "qq_music" | "kugou" | "upload" | "default" | "mock";
+  songSourceType: "upload" | "default" | "link" | "recommendation";
+  musicSelected?: boolean;
   sourceUrl?: string;
   songTitle: string;
-  artist?: string;
+  artist: string;
   coverUrl?: string;
-  audioUrl: string;
+  audioUrl?: string;
 
   backgroundImageUrl?: string;
   backgroundPositionX: number;
@@ -55,6 +56,35 @@ POST /api/gifts
 GET  /api/gifts/[id]
 POST /api/upload
 ```
+
+## 阶段 3 音乐 API 技术路线
+
+当前阶段先使用本地 mock 音乐能力，不直接依赖真实 QQ 音乐 / 酷狗 API。选歌页已经固定为四种互斥方式：链接识别、歌曲推荐、上传本地音频、系统 BGM。后续接入真实服务时，建议保持以下适配层形状：
+
+```ts
+type MusicTrack = {
+  id: string;
+  title: string;
+  artist: string;
+  platform: "QQ 音乐" | "酷狗音乐" | "系统 BGM" | "用户上传";
+  coverUrl?: string;
+  audioUrl?: string;
+  sourceUrl?: string;
+};
+
+type ParseMusicLinkResult =
+  | { ok: true; track: MusicTrack }
+  | { ok: false; message: string; fallback: "search" | "upload" | "default" };
+```
+
+后续实现建议：
+
+- `POST /api/music/parse-link`：服务端识别 QQ 音乐 / 酷狗链接，返回歌曲元数据；失败时返回可展示的失败原因和兜底方向。
+- `POST /api/music/search`：根据歌手、场景或关键词返回最多 3 首推荐曲目；真实 API 不可用时返回内置推荐。
+- 播放地址不是强依赖字段；如果真实 API 无法稳定提供可播放音频，礼物页继续使用系统 BGM 或用户上传音频兜底。
+- 如果用户自有 API 能提供 mp3、专辑、封面、歌曲信息，可优先接入该 API，并映射到 `MusicTrack`，不重写选歌页面。
+- 系统 BGM 编辑建议先落在本地合成参数上，例如音色、速度、音高组合、情绪 preset；确认体验稳定后再考虑保存为 Gift 字段。
+- 所有音乐来源保持排他选择，最终 Gift 只保存用户最后明确选中的一首背景音乐。
 
 ## 阶段 2 Supabase 云端分享
 

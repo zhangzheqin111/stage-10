@@ -181,6 +181,17 @@ button {
   padding: 13px 14px;
 }
 
+.inline-action {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.compact-btn {
+  min-height: 46px;
+  padding: 0 14px;
+}
+
 .textarea {
   min-height: 110px;
   resize: vertical;
@@ -191,6 +202,24 @@ button {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.current-choice {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(198, 105, 142, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.current-choice span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.current-choice strong {
+  font-size: 16px;
 }
 
 .grid-two {
@@ -210,6 +239,37 @@ button {
 .option-card.active {
   border-color: rgba(198, 105, 142, 0.58);
   box-shadow: 0 0 0 3px rgba(248, 201, 216, 0.34);
+}
+
+.music-result,
+.music-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.mock-cover {
+  width: 58px;
+  height: 58px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(67, 52, 60, 0.08);
+}
+
+.mock-cover.small {
+  width: 46px;
+  height: 46px;
+}
+
+.uploaded-cover {
+  background: linear-gradient(135deg, #f8c9d8, #fff7df 48%, #cdebd6);
+}
+
+.use-track-btn {
+  min-height: 34px;
+  margin-top: 8px;
+  font-size: 12px;
 }
 
 .theme-dot {
@@ -284,6 +344,32 @@ button {
 .color-swatch.active {
   outline: 3px solid rgba(216, 131, 162, 0.34);
   outline-offset: 2px;
+}
+
+.upload-music-box {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  border: 1px solid rgba(216, 131, 162, 0.36);
+  border-radius: 8px;
+  color: rgba(89, 61, 73, 0.76);
+  background: rgba(255, 231, 239, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.62);
+  cursor: pointer;
+}
+
+.upload-music-box input {
+  width: 0;
+  height: 0;
+  opacity: 0;
+  position: absolute;
+}
+
+.upload-music-box span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .footer-actions {

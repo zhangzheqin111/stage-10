@@ -3,15 +3,22 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { AppHeader } from "@/components/AppHeader";
+import { startCreationFlow, stopCreationFlow } from "@/lib/creationFlow";
 import { clearDraft } from "@/lib/gift";
 import { clearLocalDraft } from "@/lib/localGiftStore";
 
 export default function HomePage() {
   function resetDraft() {
+    stopCreationFlow();
     clearDraft();
     clearLocalDraft().catch(() => {
       // Resetting should never block the user from starting.
     });
+  }
+
+  function startFreshDraft() {
+    resetDraft();
+    startCreationFlow();
   }
 
   useEffect(() => {
@@ -29,7 +36,7 @@ export default function HomePage() {
             选择一段旋律，写一句祝福，把它变成可以触摸互动的 BloomBeat（花律）礼物。
           </p>
           <div className="single-action">
-            <Link className="primary-btn" href="/create/song" onClick={resetDraft}>
+            <Link className="primary-btn" href="/create/song" onClick={startFreshDraft}>
               开始制作
             </Link>
           </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { GiftExperience } from "@/components/GiftExperience";
+import { markReturnToEdit } from "@/lib/creationFlow";
 import { getCloudGift } from "@/lib/cloudGiftStore";
 import { GiftDraft, getDraft } from "@/lib/gift";
 import { getLocalDraft, getLocalGift } from "@/lib/localGiftStore";
@@ -88,7 +89,7 @@ export default function GiftPage() {
         />
         {fromPreview ? (
           <div className="preview-return">
-            <Link href="/create/preview">返回</Link>
+            <Link href="/create/preview" onClick={markReturnToEdit}>返回</Link>
           </div>
         ) : null}
         {shareOpen ? (

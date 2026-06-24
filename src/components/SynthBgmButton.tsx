@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export function SynthBgmButton({ audioUrl, volume }: { audioUrl?: string; volume: number }) {
+export function SynthBgmButton({ audioUrl, autoStart = true, volume }: { audioUrl?: string; autoStart?: boolean; volume: number }) {
   const [playing, setPlaying] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const audioRef = useRef<{
@@ -103,12 +103,16 @@ export function SynthBgmButton({ audioUrl, volume }: { audioUrl?: string; volume
   }, [audioUrl]);
 
   useEffect(() => {
+    if (!autoStart) {
+      return stop;
+    }
+
     start().catch(() => {
       setBlocked(true);
       setPlaying(false);
     });
     return stop;
-  }, [start, stop]);
+  }, [autoStart, start, stop]);
 
   return (
     <button

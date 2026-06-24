@@ -1,18 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
+import { GiftBackground } from "@/components/GiftBackground";
 import { GiftDraft, getDraft, normalizeBlessing, normalizeRecipientName, saveDraft, themes, ThemeKey } from "@/lib/gift";
 import { fileToDataUrl, getLocalDraft, saveLocalDraft } from "@/lib/localGiftStore";
+
+const blessingColorSwatches = ["#c7608a", "#5f9d6d", "#c99542", "#6b8fc7", "#ffffff", "#43343c"];
 
 export default function ContentPage() {
   const [draft, setDraft] = useState<GiftDraft>(getDraft());
   const [imageMessage, setImageMessage] = useState("");
+  const [colorMessage, setColorMessage] = useState("");
+  const colorInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     getLocalDraft()
-      .then((savedDraft) => setDraft(savedDraft ?? getDraft()))
+      .then((savedDraft) => {
+        const nextDraft = {
+          ...((savedDraft ?? getDraft()) as GiftDraft),
+          backgroundImageUrl: undefined,
+          backgroundPositionX: 50,
+          backgroundPositionY: 0,
+          backgroundScale: 100
+        };
+        setDraft(nextDraft);
+        saveDraft(nextDraft);
+        saveLocalDraft(nextDraft);
+      })
       .catch(() => setDraft(getDraft()));
   }, []);
 
@@ -96,13 +112,8 @@ export default function ContentPage() {
             <div className="image-crop-control">
               <div
                 className={`image-crop-preview ${draft.backgroundImageUrl ? "" : "empty"}`}
-                style={{
-                  backgroundImage: draft.backgroundImageUrl ? `url(${draft.backgroundImageUrl})` : undefined,
-                  backgroundPosition: `${draft.backgroundPositionX}% ${draft.backgroundPositionY}%`,
-                  backgroundSize: `auto ${draft.backgroundScale}%`
-                }}
               >
-                {!draft.backgroundImageUrl ? <span>背景预览</span> : null}
+                {draft.backgroundImageUrl ? <GiftBackground gift={draft} /> : <span>图片预览栏</span>}
               </div>
               {draft.backgroundImageUrl ? (
                 <>
@@ -118,30 +129,23 @@ export default function ContentPage() {
                   />
                 </label>
                 <label>
-                  上下位置：{draft.backgroundScale === 100 ? 0 : draft.backgroundPositionY}%
+                  上下位置：{draft.backgroundPositionY}%
                   <input
                     className="range"
-                    disabled={draft.backgroundScale === 100}
                     max={100}
                     min={0}
                     onChange={(event) => update({ backgroundPositionY: Number(event.target.value) })}
                     type="range"
-                    value={draft.backgroundScale === 100 ? 0 : draft.backgroundPositionY}
+                    value={draft.backgroundPositionY}
                   />
                 </label>
                 <label>
-                  Zoom in：{draft.backgroundScale - 100}%
+                  比例：{draft.backgroundScale}%
                   <input
                     className="range"
                     max={220}
-                    min={100}
-                    onChange={(event) => {
-                      const nextScale = Number(event.target.value);
-                      update({
-                        backgroundScale: nextScale,
-                        backgroundPositionY: nextScale === 100 ? 0 : draft.backgroundPositionY
-                      });
-                    }}
+                    min={50}
+                    onChange={(event) => update({ backgroundScale: Number(event.target.value) })}
                     type="range"
                     value={draft.backgroundScale}
                   />
@@ -198,6 +202,45 @@ export default function ContentPage() {
               type="range"
               value={draft.blessingFontSize}
             />
+          </div>
+
+          <div className="field">
+            <label>祝福颜色</label>
+            <div className="color-tools">
+              <label className="color-picker">
+                <span className="color-preview" style={{ background: draft.blessingColor }} />
+                <input
+                  aria-label="选择祝福颜色"
+                  onChange={(event) => {
+                    update({ blessingColor: event.target.value });
+                    setColorMessage("");
+                  }}
+                  ref={colorInputRef}
+                  type="color"
+                  value={draft.blessingColor}
+                />
+                <span>{draft.blessingColor.toUpperCase()}</span>
+              </label>
+              <button className="secondary-btn color-pick-btn" onClick={() => colorInputRef.current?.click()} type="button">
+                更多颜色
+              </button>
+            </div>
+            <div className="color-swatches" aria-label="常用祝福颜色">
+              {blessingColorSwatches.map((color) => (
+                <button
+                  className={`color-swatch ${draft.blessingColor.toLowerCase() === color ? "active" : ""}`}
+                  key={color}
+                  onClick={() => {
+                    update({ blessingColor: color });
+                    setColorMessage("");
+                  }}
+                  style={{ background: color }}
+                  type="button"
+                  aria-label={`选择颜色 ${color}`}
+                />
+              ))}
+            </div>
+            {colorMessage ? <p className="hint">{colorMessage}</p> : null}
           </div>
 
           <div className="field">

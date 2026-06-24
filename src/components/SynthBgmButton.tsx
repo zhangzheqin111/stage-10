@@ -113,7 +113,17 @@ export function SynthBgmButton({ audioUrl, volume }: { audioUrl?: string; volume
   return (
     <button
       className={`speaker-btn ${playing ? "" : "muted"}`}
-      onClick={playing ? stop : () => start().catch(() => setBlocked(true))}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (playing) {
+          stop();
+          return;
+        }
+        start().catch(() => setBlocked(true));
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+      onPointerMove={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
       type="button"
       aria-label={playing ? "静音" : "播放音乐"}
       title={playing ? "静音" : blocked ? "点击播放" : "播放音乐"}

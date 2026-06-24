@@ -1,7 +1,23 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect } from "react";
 import { AppHeader } from "@/components/AppHeader";
+import { clearDraft } from "@/lib/gift";
+import { clearLocalDraft } from "@/lib/localGiftStore";
 
 export default function HomePage() {
+  function resetDraft() {
+    clearDraft();
+    clearLocalDraft().catch(() => {
+      // Resetting should never block the user from starting.
+    });
+  }
+
+  useEffect(() => {
+    resetDraft();
+  }, []);
+
   return (
     <main className="app-shell">
       <div className="phone-frame">
@@ -12,12 +28,9 @@ export default function HomePage() {
           <p className="lead">
             选择一段旋律，写一句祝福，把它变成可以触摸互动的 BloomBeat（花律）礼物。
           </p>
-          <div className="footer-actions">
-            <Link className="primary-btn" href="/create/song">
+          <div className="single-action">
+            <Link className="primary-btn" href="/create/song" onClick={resetDraft}>
               开始制作
-            </Link>
-            <Link className="secondary-btn" href="/gift/demo">
-              查看示例
             </Link>
           </div>
         </section>

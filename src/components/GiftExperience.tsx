@@ -3,6 +3,7 @@
 import { PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { GiftDraft, GestureState, themes } from "@/lib/gift";
+import { GiftBackground } from "./GiftBackground";
 import { SynthBgmButton } from "./SynthBgmButton";
 
 const gestureLabel: Record<GestureState["type"], string> = {
@@ -168,15 +169,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         } as React.CSSProperties
       }
     >
-      <div
-        className="gift-bg"
-        style={{
-          backgroundImage: gift.backgroundImageUrl ? `url(${gift.backgroundImageUrl})` : theme.gradient,
-          backgroundPosition: `${gift.backgroundPositionX ?? 50}% ${gift.backgroundPositionY ?? 50}%`,
-          backgroundSize: gift.backgroundImageUrl ? `auto ${gift.backgroundScale ?? 100}%` : "cover",
-          backgroundRepeat: "no-repeat"
-        }}
-      />
+      <GiftBackground gift={gift} />
       <div className="wind-layer" aria-hidden="true">
         <span />
         <span />

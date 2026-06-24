@@ -19,6 +19,7 @@ export type GiftDraft = {
   blessingDensity: 15 | 30 | 50 | 75;
   blessingLineGap: number;
   theme: ThemeKey;
+  createdAt?: string;
 };
 
 export type GestureState = {
@@ -138,4 +139,12 @@ export function saveDraft(nextDraft: Partial<GiftDraft>) {
   const merged = { ...current, ...nextDraft };
   const { audioUrl, backgroundImageUrl, ...lightDraft } = merged;
   window.localStorage.setItem(storageKey, JSON.stringify(lightDraft));
+}
+
+export function clearDraft() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(storageKey);
 }

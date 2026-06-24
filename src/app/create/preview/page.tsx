@@ -5,10 +5,17 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { GiftExperience } from "@/components/GiftExperience";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { saveCloudGift } from "@/lib/cloudGiftStore";
 import { isReloadNavigation, shouldStartFromGuide } from "@/lib/creationFlow";
 import { GiftDraft, getDraft } from "@/lib/gift";
 import { createGiftId, getLocalDraft, saveLocalDraft, saveLocalGift } from "@/lib/localGiftStore";
+
+const minimumLoadingTime = 720;
+
+function waitForLoadingCue() {
+  return new Promise((resolve) => window.setTimeout(resolve, minimumLoadingTime));
+}
 
 export default function PreviewPage() {
   const router = useRouter();
@@ -16,6 +23,7 @@ export default function PreviewPage() {
   const [shareUrl, setShareUrl] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     if (shouldStartFromGuide()) {
@@ -23,9 +31,9 @@ export default function PreviewPage() {
       return;
     }
 
-    getLocalDraft()
+    Promise.all([getLocalDraft(), waitForLoadingCue()])
       .then((savedDraft) => {
-        const baseDraft = savedDraft ?? getDraft();
+        const baseDraft = savedDraft[0] ?? getDraft();
         const nextDraft = isReloadNavigation()
           ? {
               ...baseDraft,
@@ -47,7 +55,18 @@ export default function PreviewPage() {
   }, [router]);
 
   if (!draft) {
-    return null;
+    return (
+      <main className="app-shell">
+        <div className="phone-frame">
+          <AppHeader step="3 / 3 预览" />
+          <section className="section soft-card stack loading-card">
+            <span className="loading-dots" aria-hidden="true" />
+            <h1>正在整理礼物预览</h1>
+            <p className="lead">花园、音乐和祝福语马上就位。</p>
+          </section>
+        </div>
+      </main>
+    );
   }
 
   const giftEffectHref = shareUrl ? `${new URL(shareUrl).pathname}?from=preview` : "/gift/demo?from=preview";
@@ -78,8 +97,12 @@ export default function PreviewPage() {
     if (!shareUrl) {
       return;
     }
-    await navigator.clipboard.writeText(shareUrl);
-    setShareMessage("链接已复制。");
+    const copied = await copyTextToClipboard(shareUrl);
+    setShareCopied(copied);
+    setShareMessage(copied ? "链接已复制，可以直接粘贴转发。" : "复制失败，请长按链接或手动选中后复制。");
+    if (copied) {
+      window.setTimeout(() => setShareCopied(false), 1800);
+    }
   }
 
   async function handleShareAction() {
@@ -110,9 +133,9 @@ export default function PreviewPage() {
             <strong>分享这份礼物</strong>
             <p className="hint">生成一条专属礼物链接，复制后就可以把这份心意转发给 TA。</p>
             {shareUrl ? <input className="input" readOnly value={shareUrl} /> : null}
-            {shareMessage ? <p className="hint">{shareMessage}</p> : null}
-            <button className="primary-btn" onClick={handleShareAction} type="button">
-              {shareUrl ? "复制链接" : "生成礼物链接"}
+            {shareMessage ? <p className={`hint ${shareCopied ? "copy-success" : ""}`}>{shareMessage}</p> : null}
+            <button className={`primary-btn ${shareCopied ? "copy-done" : ""}`} onClick={handleShareAction} type="button">
+              {shareUrl ? (shareCopied ? "已复制" : "复制链接") : "生成礼物链接"}
             </button>
           </div>
         ) : null}

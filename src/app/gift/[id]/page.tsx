@@ -4,10 +4,17 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { GiftExperience } from "@/components/GiftExperience";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { markReturnToEdit } from "@/lib/creationFlow";
 import { getCloudGift } from "@/lib/cloudGiftStore";
 import { GiftDraft, getDraft } from "@/lib/gift";
 import { getLocalDraft, getLocalGift } from "@/lib/localGiftStore";
+
+const minimumLoadingTime = 720;
+
+function waitForLoadingCue() {
+  return new Promise((resolve) => window.setTimeout(resolve, minimumLoadingTime));
+}
 
 export default function GiftPage() {
   const [gift, setGift] = useState<GiftDraft | null>(null);
@@ -15,6 +22,7 @@ export default function GiftPage() {
   const [missingMessage, setMissingMessage] = useState("阶段 2 本地模式下，礼物链接需要在同一台设备和同一浏览器中打开。");
   const [shareOpen, setShareOpen] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
   const [currentShareUrl, setCurrentShareUrl] = useState("");
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -26,6 +34,8 @@ export default function GiftPage() {
 
   useEffect(() => {
     async function loadGift() {
+      await waitForLoadingCue();
+
       if (params.id === "demo") {
         setGift((await getLocalDraft()) ?? getDraft());
         return;
@@ -67,13 +77,27 @@ export default function GiftPage() {
   }
 
   if (!gift) {
-    return null;
+    return (
+      <main className="app-shell">
+        <div className="phone-frame">
+          <section className="section soft-card stack loading-card">
+            <span className="loading-dots" aria-hidden="true" />
+            <h1>正在打开这份礼物</h1>
+            <p className="lead">正在准备音乐盒和花园互动。</p>
+          </section>
+        </div>
+      </main>
+    );
   }
 
   async function copyGiftLink() {
     const shareUrl = currentShareUrl || `${window.location.origin}/gift/${params.id}`;
-    await navigator.clipboard.writeText(shareUrl);
-    setShareMessage("礼物链接已复制，可以继续转发这份心意。");
+    const copied = await copyTextToClipboard(shareUrl);
+    setShareCopied(copied);
+    setShareMessage(copied ? "礼物链接已复制，可以继续转发这份心意。" : "复制失败，请长按链接或手动选中后复制。");
+    if (copied) {
+      window.setTimeout(() => setShareCopied(false), 1800);
+    }
   }
 
   return (
@@ -100,9 +124,9 @@ export default function GiftPage() {
             <strong>转发这份礼物</strong>
             <p className="hint">复制礼物链接，让更多人看到这份心意。</p>
             <input className="input" readOnly value={currentShareUrl} />
-            {shareMessage ? <p className="hint">{shareMessage}</p> : null}
-            <button className="primary-btn" onClick={copyGiftLink} type="button">
-              复制链接
+            {shareMessage ? <p className={`hint ${shareCopied ? "copy-success" : ""}`}>{shareMessage}</p> : null}
+            <button className={`primary-btn ${shareCopied ? "copy-done" : ""}`} onClick={copyGiftLink} type="button">
+              {shareCopied ? "已复制" : "复制链接"}
             </button>
           </div>
         ) : null}

@@ -41,8 +41,21 @@ export const themes: Record<
     wash: string;
     mask: string;
     gradient: string;
+    backgroundImage: string;
+    backgroundPositionX: number;
+    backgroundPositionY: number;
+    backgroundScale: number;
     text: string;
     flower: string[];
+    accent: string;
+    deep: string;
+    grass: string;
+    leaf: string;
+    glow: string;
+    box: string;
+    boxTop: string;
+    note: string;
+    heart: string;
   }
 > = {
   sakura: {
@@ -51,8 +64,21 @@ export const themes: Record<
     wash: "rgba(255, 238, 246, 0.66)",
     mask: "rgba(248, 201, 216, 0.3)",
     gradient: "linear-gradient(160deg, #ffe7ef, #fff7fb 48%, #f8d7e1)",
+    backgroundImage: "/theme-backgrounds/sakura.jpg",
+    backgroundPositionX: 50,
+    backgroundPositionY: 50,
+    backgroundScale: 100,
     text: "#c7608a",
-    flower: ["#f28caf", "#f7bfd2", "#df7fa5", "#f3a7bd"]
+    flower: ["#f28caf", "#f7bfd2", "#df7fa5", "#f3a7bd"],
+    accent: "#db7d9f",
+    deep: "#9f4b6f",
+    grass: "#7fbf8c",
+    leaf: "#98d1a5",
+    glow: "rgba(255, 232, 244, 0.44)",
+    box: "linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 221, 230, 0.95))",
+    boxTop: "rgba(255, 246, 250, 0.9)",
+    note: "#c7608a",
+    heart: "#ffe7a8"
   },
   morning: {
     name: "晨光绿",
@@ -60,8 +86,21 @@ export const themes: Record<
     wash: "rgba(237, 255, 242, 0.66)",
     mask: "rgba(205, 235, 214, 0.3)",
     gradient: "linear-gradient(160deg, #e6f7d8, #fbfff7 48%, #cdebd6)",
+    backgroundImage: "/theme-backgrounds/morning.jpg",
+    backgroundPositionX: 50,
+    backgroundPositionY: 50,
+    backgroundScale: 100,
     text: "#5f9d6d",
-    flower: ["#8dd49c", "#bddf9c", "#72bd90", "#a7dcb4"]
+    flower: ["#8dd49c", "#bddf9c", "#72bd90", "#a7dcb4"],
+    accent: "#5ba879",
+    deep: "#3f7f56",
+    grass: "#6eaf72",
+    leaf: "#a6d88f",
+    glow: "rgba(215, 244, 190, 0.44)",
+    box: "linear-gradient(180deg, rgba(253, 255, 245, 0.95), rgba(218, 241, 204, 0.94))",
+    boxTop: "rgba(247, 255, 232, 0.9)",
+    note: "#5f9d6d",
+    heart: "#fff2a8"
   },
   cream: {
     name: "奶油黄",
@@ -69,8 +108,21 @@ export const themes: Record<
     wash: "rgba(255, 249, 223, 0.7)",
     mask: "rgba(247, 230, 182, 0.3)",
     gradient: "linear-gradient(160deg, #fff0ba, #fffaf0 50%, #f8df9d)",
+    backgroundImage: "/theme-backgrounds/cream.jpg",
+    backgroundPositionX: 50,
+    backgroundPositionY: 50,
+    backgroundScale: 100,
     text: "#c99542",
-    flower: ["#f5c95f", "#ffe18a", "#efb95d", "#f8d27b"]
+    flower: ["#f5c95f", "#ffe18a", "#efb95d", "#f8d27b"],
+    accent: "#d89a3d",
+    deep: "#9b6d2f",
+    grass: "#97b85c",
+    leaf: "#bdd57d",
+    glow: "rgba(255, 231, 155, 0.48)",
+    box: "linear-gradient(180deg, rgba(255, 252, 237, 0.96), rgba(248, 224, 157, 0.94))",
+    boxTop: "rgba(255, 249, 218, 0.92)",
+    note: "#c99542",
+    heart: "#fff0a4"
   },
   blue: {
     name: "淡雅蓝",
@@ -78,8 +130,21 @@ export const themes: Record<
     wash: "rgba(237, 246, 255, 0.7)",
     mask: "rgba(205, 223, 248, 0.3)",
     gradient: "linear-gradient(160deg, #e3efff, #fbfdff 50%, #cddff8)",
+    backgroundImage: "/theme-backgrounds/blue.jpg",
+    backgroundPositionX: 50,
+    backgroundPositionY: 50,
+    backgroundScale: 100,
     text: "#6b8fc7",
-    flower: ["#8fb5eb", "#b5cdf5", "#779cd8", "#a7c4ef"]
+    flower: ["#8fb5eb", "#b5cdf5", "#779cd8", "#a7c4ef"],
+    accent: "#6b8fc7",
+    deep: "#4e6fa9",
+    grass: "#6fa3a1",
+    leaf: "#9bcac8",
+    glow: "rgba(213, 231, 255, 0.5)",
+    box: "linear-gradient(180deg, rgba(250, 253, 255, 0.96), rgba(218, 232, 250, 0.94))",
+    boxTop: "rgba(241, 247, 255, 0.92)",
+    note: "#5f82bd",
+    heart: "#d9ecff"
   }
 };
 

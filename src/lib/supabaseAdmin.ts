@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-export const cloudUnconfiguredMessage = "Supabase 云端分享未配置，已切换到本地分享模式。";
+export const cloudUnconfiguredMessage = "云端分享暂未配置，暂时无法生成可转发链接。";
 
 export function getSupabaseConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

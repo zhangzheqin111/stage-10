@@ -33,6 +33,12 @@ const handLandmarkerModelUrl =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 const visionWasmUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
 type CameraStage = "idle" | "requesting" | "tracking-loading" | "tracking-ready" | "touch-fallback";
+type CameraDiagnostics = {
+  secureContext: boolean;
+  apiSupported: boolean;
+  permission: PermissionState | "unknown" | "unsupported";
+  lastErrorName: string;
+};
 
 const cameraStageLabel: Record<CameraStage, string> = {
   idle: "未开启",
@@ -40,6 +46,14 @@ const cameraStageLabel: Record<CameraStage, string> = {
   "tracking-loading": "准备识别",
   "tracking-ready": "实时识别",
   "touch-fallback": "触摸兜底"
+};
+
+const cameraPermissionLabel: Record<CameraDiagnostics["permission"], string> = {
+  granted: "已允许",
+  denied: "已拒绝",
+  prompt: "待询问",
+  unknown: "未知",
+  unsupported: "不可查询"
 };
 
 function calculateVolume(plantHeight: number, windPower: number) {
@@ -293,6 +307,12 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
   const [handTrackingReady, setHandTrackingReady] = useState(false);
   const [hasCameraAccess, setHasCameraAccess] = useState(false);
   const [cameraStage, setCameraStage] = useState<CameraStage>("idle");
+  const [cameraDiagnostics, setCameraDiagnostics] = useState<CameraDiagnostics>({
+    secureContext: true,
+    apiSupported: true,
+    permission: "unknown",
+    lastErrorName: ""
+  });
   const [gesture, setGesture] = useState<GestureState>({
     mode: "touch",
     type: "none",
@@ -362,6 +382,10 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
   );
 
   useEffect(() => {
+    updateCameraDiagnostics();
+  }, []);
+
+  useEffect(() => {
     const stream = cameraStreamRef.current;
     if (!stream || gesture.mode !== "camera") {
       return;
@@ -381,6 +405,34 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       gestureModeRef.current = next.mode;
     }
     setGesture((current) => ({ ...current, ...next }));
+  }
+
+  async function updateCameraDiagnostics(lastErrorName?: string) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const secureContext = window.isSecureContext;
+    const apiSupported = Boolean(navigator.mediaDevices?.getUserMedia);
+    let permission: CameraDiagnostics["permission"] = "unknown";
+
+    if (navigator.permissions?.query) {
+      try {
+        const status = await navigator.permissions.query({ name: "camera" as PermissionName });
+        permission = status.state;
+      } catch {
+        permission = "unsupported";
+      }
+    } else {
+      permission = "unsupported";
+    }
+
+    setCameraDiagnostics((current) => ({
+      secureContext,
+      apiSupported,
+      permission,
+      lastErrorName: lastErrorName ?? current.lastErrorName
+    }));
   }
 
   function changeFlowerColor() {
@@ -719,6 +771,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     }
 
     if (typeof window !== "undefined" && !window.isSecureContext) {
+      updateCameraDiagnostics("InsecureContext");
       setCameraMessage(getInsecureCameraMessage());
       setGuideMode("touch");
       updateGesture({ mode: "touch", type: "none" });
@@ -728,6 +781,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
+      updateCameraDiagnostics("UnsupportedMediaDevices");
       setCameraMessage("当前浏览器不支持摄像头访问，已自动使用触摸模式。");
       setGuideMode("touch");
       updateGesture({ mode: "touch", type: "none" });
@@ -738,6 +792,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
 
     setCameraStarting(true);
     setHandTrackingReady(false);
+    updateCameraDiagnostics("");
     lastCameraControlRef.current = { height: gesture.plantHeight, wind: gesture.windPower, time: 0 };
     cameraHeightOriginRef.current = null;
     fusionModeRef.current = { mode: "primary", streak: 0 };
@@ -750,6 +805,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
 
       cameraStreamRef.current = stream;
       setHasCameraAccess(true);
+      updateCameraDiagnostics("");
       updateGesture({ mode: "camera", type: "none" });
       setGuideMode("camera");
       setCameraStage("tracking-loading");
@@ -766,6 +822,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         stopHandDetection();
         cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
         cameraStreamRef.current = null;
+        updateCameraDiagnostics("HandLandmarkerLoadError");
         setGuideMode("touch");
         setHandTrackingReady(false);
         setCameraStage("touch-fallback");
@@ -776,6 +833,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       stopHandDetection();
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
       cameraStreamRef.current = null;
+      updateCameraDiagnostics(error instanceof DOMException ? error.name : "UnknownCameraError");
       setGuideMode("touch");
       setHandTrackingReady(false);
       setHasCameraAccess(false);
@@ -880,6 +938,15 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         {
           "--theme-wash": theme.wash,
           "--image-wash": gift.backgroundImageUrl ? theme.mask : theme.wash,
+          "--theme-accent": theme.accent,
+          "--theme-deep": theme.deep,
+          "--theme-grass": theme.grass,
+          "--theme-leaf": theme.leaf,
+          "--theme-glow": theme.glow,
+          "--theme-box": theme.box,
+          "--theme-box-top": theme.boxTop,
+          "--theme-note": theme.note,
+          "--theme-heart": theme.heart,
           "--flower-scale": gesture.flowerOpen ? 1 : 0.74,
           "--flower-color": flowerColor,
           "--wind-shift": `${gesture.windPower - 35}px`,
@@ -961,9 +1028,9 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
                 top: `${top}%`,
                 color: gift.blessingColor,
                 fontSize: `${gift.blessingFontSize}px`,
-                animationDuration: `${18 / gift.blessingSpeed + index * 1.2}s`,
-                animationDelay: `${index * -3.8}s`,
-                "--line-hop-delay": `${index * -0.45}s`
+                animationDuration: `${22 / gift.blessingSpeed + index * 1.4}s`,
+                animationDelay: `${index * -4.2}s`,
+                "--line-hop-delay": `${index * -0.52}s`
               } as React.CSSProperties
             }
           >
@@ -987,7 +1054,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
             left: `${(index * 17) % 100}%`,
             top: `${10 + ((index * 23) % 76)}%`,
             animationDelay: `${index * -0.4}s`,
-            opacity: 0.36 + (index % 4) * 0.12
+            opacity: 0.28 + (index % 4) * 0.1
           }}
         />
       ))}
@@ -1074,6 +1141,22 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
               ) : null}
               <div className={`camera-status-pill ${cameraStage}`}>
                 摄像头状态：{cameraStageLabel[cameraStage]}
+              </div>
+              <div className="camera-diagnostics" aria-label="摄像头诊断">
+                <span>
+                  安全来源 <strong>{cameraDiagnostics.secureContext ? "可用" : "需要 HTTPS"}</strong>
+                </span>
+                <span>
+                  浏览器摄像头 <strong>{cameraDiagnostics.apiSupported ? "支持" : "不支持"}</strong>
+                </span>
+                <span>
+                  权限 <strong>{cameraPermissionLabel[cameraDiagnostics.permission]}</strong>
+                </span>
+                {cameraDiagnostics.lastErrorName ? (
+                  <span>
+                    最近错误 <strong>{cameraDiagnostics.lastErrorName}</strong>
+                  </span>
+                ) : null}
               </div>
               {showInitialCameraGuide ? (
                 <button

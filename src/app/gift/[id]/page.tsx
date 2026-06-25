@@ -19,7 +19,7 @@ function waitForLoadingCue() {
 export default function GiftPage() {
   const [gift, setGift] = useState<GiftDraft | null>(null);
   const [missing, setMissing] = useState(false);
-  const [missingMessage, setMissingMessage] = useState("阶段 2 本地模式下，礼物链接需要在同一台设备和同一浏览器中打开。");
+  const [missingMessage, setMissingMessage] = useState("这份礼物暂时无法打开。链接可能已失效，或礼物还没有保存成功。");
   const [shareOpen, setShareOpen] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
   const [shareCopied, setShareCopied] = useState(false);
@@ -53,8 +53,8 @@ export default function GiftPage() {
       } else {
         setMissingMessage(
           cloudGift.reason === "unconfigured"
-            ? "云端分享未配置，且本机浏览器没有找到这份本地礼物。请在生成链接的同一设备和同一浏览器中打开，或配置 Supabase 后重新生成云端链接。"
-            : "云端和本机浏览器都没有找到这份礼物。链接可能已失效，或礼物数据尚未成功保存。"
+            ? "这份礼物还没有保存成功。请让发送者重新生成礼物链接后再打开。"
+            : "这份礼物暂时无法打开。链接可能已失效，或礼物还没有保存成功。"
         );
         setMissing(true);
       }
@@ -67,9 +67,18 @@ export default function GiftPage() {
     return (
       <main className="app-shell">
         <div className="phone-frame">
-          <section className="section soft-card stack">
+          <section className="section soft-card stack state-card centered">
+            <span className="state-icon" aria-hidden="true">!</span>
             <h1>没有找到这份礼物</h1>
             <p className="lead">{missingMessage}</p>
+            <div className="state-actions">
+              <Link className="secondary-btn" href="/">
+                回到首页
+              </Link>
+              <button className="primary-btn" onClick={() => window.location.reload()} type="button">
+                重新打开
+              </button>
+            </div>
           </section>
         </div>
       </main>

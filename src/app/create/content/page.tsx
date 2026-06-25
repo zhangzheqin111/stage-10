@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { GiftBackground } from "@/components/GiftBackground";
@@ -76,7 +77,7 @@ export default function ContentPage() {
       update({ backgroundImageUrl, backgroundPositionX: 50, backgroundPositionY: 0, backgroundScale: 100 });
       setImageMessage("背景图片已保存到礼物草稿。");
     } catch {
-      setImageMessage("图片读取失败，请重新选择图片。");
+      setImageMessage("图片读取失败，请重新选择一张 5MB 以内的常见图片格式。");
     }
   }
 
@@ -127,7 +128,13 @@ export default function ContentPage() {
               <div
                 className={`image-crop-preview ${draft.backgroundImageUrl ? "" : "empty"}`}
               >
-                {draft.backgroundImageUrl ? <GiftBackground gift={draft} /> : <span>图片预览栏</span>}
+                <GiftBackground gift={draft} />
+                {!draft.backgroundImageUrl ? (
+                  <div className="theme-background-note">
+                    <strong>当前主题默认背景</strong>
+                    <p className="hint">上传图片后会替换这张系统背景。</p>
+                  </div>
+                ) : null}
               </div>
               {draft.backgroundImageUrl ? (
                 <>
@@ -176,7 +183,7 @@ export default function ContentPage() {
                   }
                   type="button"
                 >
-                  使用纯色主题背景
+                  恢复主题默认背景
                 </button>
                 </>
               ) : null}
@@ -195,6 +202,12 @@ export default function ContentPage() {
                       theme: key,
                       blessingColor: themes[key].text
                     })
+                  }
+                  style={
+                    {
+                      "--theme-accent": themes[key].accent,
+                      "--theme-wash": themes[key].wash
+                    } as CSSProperties
                   }
                   type="button"
                 >

@@ -347,7 +347,10 @@ export default function SongPage() {
                 <p className="hint">{selectedArtist}</p>
               </>
             ) : (
-              <p className="hint">还没有选定背景歌曲。</p>
+              <div className="state-card compact">
+                <strong>还没有选定背景歌曲</strong>
+                <p className="hint">可以识别链接、搜索推荐、上传本地音频，或直接选择系统 BGM。</p>
+              </div>
             )}
           </div>
 
@@ -411,7 +414,10 @@ export default function SongPage() {
                   ))}
                 </div>
               ) : (
-                <p className="hint">暂时没有匹配的推荐，可以换个词试试，或选择其他方式。</p>
+                <div className="state-card compact">
+                  <strong>暂时没有匹配的推荐</strong>
+                  <p className="hint">可以换一个关键词，或继续上传本地音频 / 选择系统 BGM。</p>
+                </div>
               )
             ) : null}
           </div>

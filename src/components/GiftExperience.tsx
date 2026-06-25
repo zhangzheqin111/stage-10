@@ -426,7 +426,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
   function getCameraErrorMessage(error: unknown) {
     if (error instanceof DOMException) {
       if (error.name === "NotAllowedError" || error.name === "SecurityError") {
-        return "摄像头权限被拒绝或当前页面不允许访问摄像头，已自动切换为触摸模式。";
+        return "摄像头权限被拒绝，或当前页面不是安全来源，已自动切换为触摸模式。";
       }
 
       if (error.name === "NotFoundError" || error.name === "OverconstrainedError") {
@@ -439,6 +439,10 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     }
 
     return "摄像头开启失败，已自动切换为触摸模式。";
+  }
+
+  function getInsecureCameraMessage() {
+    return "手机浏览器通常只允许 HTTPS 页面访问摄像头；当前局域网 HTTP 页面无法唤起摄像头，已自动切换为触摸模式。";
   }
 
   function openCurrentGuide() {
@@ -711,6 +715,15 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
 
   async function enableCameraGesture() {
     if (cameraStarting) {
+      return;
+    }
+
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      setCameraMessage(getInsecureCameraMessage());
+      setGuideMode("touch");
+      updateGesture({ mode: "touch", type: "none" });
+      setHasCameraAccess(false);
+      setCameraStage("touch-fallback");
       return;
     }
 

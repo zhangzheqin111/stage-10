@@ -28,3 +28,5 @@ Thumbs.db
 
 # Local browser/server scratch logs
 dev-logs/dev-server.*.log
+dev-server.log
+dev-server.err.log

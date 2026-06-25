@@ -7,9 +7,9 @@ import { AppHeader } from "@/components/AppHeader";
 import { GiftExperience } from "@/components/GiftExperience";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { saveCloudGift } from "@/lib/cloudGiftStore";
-import { isReloadNavigation, shouldStartFromGuide } from "@/lib/creationFlow";
+import { shouldStartFromGuide } from "@/lib/creationFlow";
 import { GiftDraft, getDraft } from "@/lib/gift";
-import { createGiftId, getLocalDraft, saveLocalDraft, saveLocalGift } from "@/lib/localGiftStore";
+import { createGiftId, getLocalDraft, saveLocalGift } from "@/lib/localGiftStore";
 
 const minimumLoadingTime = 720;
 
@@ -33,23 +33,7 @@ export default function PreviewPage() {
 
     Promise.all([getLocalDraft(), waitForLoadingCue()])
       .then((savedDraft) => {
-        const baseDraft = savedDraft[0] ?? getDraft();
-        const nextDraft = isReloadNavigation()
-          ? {
-              ...baseDraft,
-              audioUrl: undefined,
-              backgroundImageUrl: undefined,
-              backgroundPositionX: 50,
-              backgroundPositionY: 0,
-              backgroundScale: 100
-            }
-          : baseDraft;
-
-        if (isReloadNavigation()) {
-          saveLocalDraft(nextDraft);
-        }
-
-        setDraft(nextDraft);
+        setDraft(savedDraft[0] ?? getDraft());
       })
       .catch(() => setDraft(getDraft()));
   }, [router]);

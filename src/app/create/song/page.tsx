@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
-import { isReloadNavigation, shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
+import { shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
 import { getDraft, saveDraft } from "@/lib/gift";
 import { fileToDataUrl, getLocalDraft, saveLocalDraft } from "@/lib/localGiftStore";
 import { MockMusicTrack, parseMockMusicLink, searchMockMusic } from "@/lib/mockMusic";
@@ -20,6 +20,20 @@ const bgms = [
 ];
 
 const previewDurationMs = 10000;
+
+function canUseAudioFile(file: File) {
+  const normalizedName = file.name.toLowerCase();
+  if (normalizedName.endsWith(".amr") || file.type === "audio/amr" || file.type === "audio/amr-wb") {
+    return false;
+  }
+
+  return (
+    ["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", ""].includes(file.type) ||
+    normalizedName.endsWith(".mp3") ||
+    normalizedName.endsWith(".wav") ||
+    normalizedName.endsWith(".m4a")
+  );
+}
 
 async function parseMusicLink(url: string): Promise<ParseMusicLinkResult> {
   try {
@@ -87,23 +101,7 @@ export default function SongPage() {
 
     getLocalDraft()
       .then((draft) => {
-        const nextDraft = draft ?? getDraft();
-        const shouldClearMedia = isReloadNavigation();
-        const visibleDraft = shouldClearMedia
-          ? {
-              ...nextDraft,
-              audioUrl: undefined,
-              backgroundImageUrl: undefined,
-              backgroundPositionX: 50,
-              backgroundPositionY: 0,
-              backgroundScale: 100
-            }
-          : nextDraft;
-
-        if (shouldClearMedia) {
-          saveDraft(visibleDraft);
-          saveLocalDraft(visibleDraft);
-        }
+        const visibleDraft = draft ?? getDraft();
 
         if (visibleDraft.musicSelected) {
           setSelected(visibleDraft.songTitle);
@@ -155,6 +153,10 @@ export default function SongPage() {
   function playPreview(song: (typeof bgms)[number]) {
     stopPreview();
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      setUploadMessage("当前浏览器暂不支持系统 BGM 试听，但仍可使用该 BGM。");
+      return;
+    }
     const context = new AudioContextClass();
     const gain = context.createGain();
     gain.gain.value = 0.05;
@@ -173,6 +175,7 @@ export default function SongPage() {
     });
 
     previewRef.current = { context, oscillators };
+    context.resume().catch(() => undefined);
     previewTimerRef.current = window.setTimeout(stopPreview, previewDurationMs);
   }
 
@@ -195,7 +198,7 @@ export default function SongPage() {
   }
 
   async function chooseSong(song: (typeof bgms)[number]) {
-    const currentDraft = (await getLocalDraft()) ?? getDraft();
+    const currentDraft = getDraft();
     const nextDraft = {
       ...currentDraft,
       songSourceType: "default" as const,
@@ -207,14 +210,18 @@ export default function SongPage() {
     startCreationFlow();
     setSelected(song.title);
     setSelectedArtist(song.artist);
+    setUploadMessage(`已选择系统 BGM：${song.title}。`);
     saveDraft(nextDraft);
-    await saveLocalDraft(nextDraft);
-    setUploadMessage("");
-    playPreview(song);
+    void getLocalDraft().then((draft) => saveLocalDraft({ ...(draft ?? nextDraft), ...nextDraft }));
+    try {
+      playPreview(song);
+    } catch {
+      setUploadMessage(`已选择系统 BGM：${song.title}，但当前浏览器需要再次点击后才能试听。`);
+    }
   }
 
   async function chooseUploadedAudio(audio: { title: string; audioUrl: string }) {
-    const currentDraft = (await getLocalDraft()) ?? getDraft();
+    const currentDraft = getDraft();
     const nextDraft = {
       ...currentDraft,
       songSourceType: "upload" as const,
@@ -228,13 +235,13 @@ export default function SongPage() {
     setSelected(audio.title);
     setSelectedArtist("用户上传音频");
     saveDraft({ songSourceType: "upload", musicSelected: true, songTitle: audio.title, artist: "用户上传音频" });
-    await saveLocalDraft(nextDraft);
+    void getLocalDraft().then((draft) => saveLocalDraft({ ...(draft ?? nextDraft), ...nextDraft }));
     setUploadMessage("已重新使用上传音频作为背景音乐。");
     playUploadedPreview(audio.audioUrl).catch(() => setUploadMessage("已使用上传音频，但浏览器需要点击页面后才能试听。"));
   }
 
   async function chooseMockTrack(track: MockMusicTrack, sourceType: "link" | "recommendation") {
-    const currentDraft = (await getLocalDraft()) ?? getDraft();
+    const currentDraft = getDraft();
     const nextDraft = {
       ...currentDraft,
       songSourceType: sourceType,
@@ -251,9 +258,13 @@ export default function SongPage() {
       setResolvedTrack(track);
     }
     saveDraft(nextDraft);
-    await saveLocalDraft(nextDraft);
-    setUploadMessage("");
-    playMockPreview(track);
+    void getLocalDraft().then((draft) => saveLocalDraft({ ...(draft ?? nextDraft), ...nextDraft }));
+    setUploadMessage(`已选择：${track.title}。`);
+    try {
+      playMockPreview(track);
+    } catch {
+      setUploadMessage(`已选择：${track.title}，但当前浏览器需要再次点击后才能试听。`);
+    }
   }
 
   async function handleParseLink() {
@@ -286,8 +297,8 @@ export default function SongPage() {
       return;
     }
 
-    if (!["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/aac"].includes(file.type)) {
-      setUploadMessage("请上传 mp3 / wav / m4a 格式音频。");
+    if (!canUseAudioFile(file)) {
+      setUploadMessage("暂不支持手机录音机生成的 AMR 音频，请从文件中选择 mp3 / wav / m4a。");
       return;
     }
 
@@ -302,7 +313,7 @@ export default function SongPage() {
     startCreationFlow();
     setUploadedAudio({ title, audioUrl });
     setSelected(title);
-    const currentDraft = (await getLocalDraft()) ?? getDraft();
+    const currentDraft = getDraft();
     const nextDraft = {
       ...currentDraft,
       songSourceType: "upload",
@@ -312,7 +323,7 @@ export default function SongPage() {
       audioUrl
     } as const;
     saveDraft({ songSourceType: "upload", musicSelected: true, songTitle: title, artist: "用户上传音频" });
-    await saveLocalDraft(nextDraft);
+    void getLocalDraft().then((draft) => saveLocalDraft({ ...(draft ?? nextDraft), ...nextDraft }));
     setSelectedArtist("用户上传音频");
     setUploadMessage("音频已保存到本地礼物草稿，生成链接后可在本机新窗口打开。");
     playUploadedPreview(audioUrl).catch(() => setUploadMessage("音频已保存；浏览器需要点击页面后才能试听。"));
@@ -409,7 +420,7 @@ export default function SongPage() {
             <label>方式三：上传本地音频</label>
             <label className="upload-music-box">
               <input
-                accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4"
+                accept=".mp3,.wav,.m4a"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   setUploadFileName(file?.name ?? "");

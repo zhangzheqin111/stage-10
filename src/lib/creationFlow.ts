@@ -1,12 +1,36 @@
 const flowKey = "bloombeat-creation-flow";
 const preserveEditKey = "bloombeat-preserve-edit";
 
+function setSessionFlag(key: string) {
+  try {
+    window.sessionStorage.setItem(key, "1");
+  } catch {
+    // Restricted browsers may block sessionStorage; creation should still work.
+  }
+}
+
+function removeSessionFlag(key: string) {
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // Ignore restricted storage during navigation/reset.
+  }
+}
+
+function hasSessionFlag(key: string) {
+  try {
+    return window.sessionStorage.getItem(key) === "1";
+  } catch {
+    return true;
+  }
+}
+
 export function startCreationFlow() {
   if (typeof window === "undefined") {
     return;
   }
 
-  window.sessionStorage.setItem(flowKey, "1");
+  setSessionFlag(flowKey);
 }
 
 export function stopCreationFlow() {
@@ -14,8 +38,8 @@ export function stopCreationFlow() {
     return;
   }
 
-  window.sessionStorage.removeItem(flowKey);
-  window.sessionStorage.removeItem(preserveEditKey);
+  removeSessionFlag(flowKey);
+  removeSessionFlag(preserveEditKey);
 }
 
 export function markReturnToEdit() {
@@ -23,8 +47,8 @@ export function markReturnToEdit() {
     return;
   }
 
-  window.sessionStorage.setItem(flowKey, "1");
-  window.sessionStorage.setItem(preserveEditKey, "1");
+  setSessionFlag(flowKey);
+  setSessionFlag(preserveEditKey);
 }
 
 export function shouldStartFromGuide() {
@@ -32,7 +56,7 @@ export function shouldStartFromGuide() {
     return false;
   }
 
-  return window.sessionStorage.getItem(flowKey) !== "1";
+  return !hasSessionFlag(flowKey);
 }
 
 export function consumePreserveEdit() {
@@ -40,8 +64,8 @@ export function consumePreserveEdit() {
     return false;
   }
 
-  const shouldPreserve = window.sessionStorage.getItem(preserveEditKey) === "1";
-  window.sessionStorage.removeItem(preserveEditKey);
+  const shouldPreserve = hasSessionFlag(preserveEditKey);
+  removeSessionFlag(preserveEditKey);
   return shouldPreserve;
 }
 

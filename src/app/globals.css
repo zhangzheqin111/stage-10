@@ -14,6 +14,12 @@
   box-sizing: border-box;
 }
 
+*,
+*::before,
+*::after {
+  min-width: 0;
+}
+
 html,
 body {
   min-height: 100%;
@@ -158,6 +164,9 @@ button {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
   transition:
     transform 160ms ease,
     box-shadow 160ms ease,
@@ -214,6 +223,7 @@ button {
   color: var(--ink);
   outline: 0;
   padding: 13px 14px;
+  min-width: 0;
 }
 
 .inline-action {
@@ -260,6 +270,7 @@ button {
 
 .current-choice strong {
   font-size: 16px;
+  overflow-wrap: anywhere;
 }
 
 .grid-two {
@@ -274,6 +285,7 @@ button {
   background: rgba(255, 255, 255, 0.62);
   padding: 12px;
   text-align: left;
+  min-width: 0;
 }
 
 .option-card.active {
@@ -287,6 +299,14 @@ button {
   grid-template-columns: auto 1fr;
   gap: 10px;
   align-items: center;
+  min-width: 0;
+}
+
+.music-result strong,
+.music-option strong,
+.music-result .hint,
+.music-option .hint {
+  overflow-wrap: anywhere;
 }
 
 .mock-cover {
@@ -360,6 +380,8 @@ button {
 .color-picker span:last-child {
   color: var(--muted);
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .color-pick-btn {
@@ -484,6 +506,7 @@ button {
   background: rgba(255, 255, 255, 0.86);
   box-shadow: var(--shadow);
   backdrop-filter: blur(16px);
+  overflow-wrap: anywhere;
 }
 
 .share-close {
@@ -687,24 +710,28 @@ button {
   gap: 8px;
   align-items: start;
   padding: 10px;
-  min-width: 148px;
+  width: min(218px, calc(100% - 24px));
   color: var(--ink);
   background: rgba(255, 255, 255, 0.58);
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 8px;
   backdrop-filter: blur(14px);
+  box-sizing: border-box;
 }
 
 .data-panel p {
   margin: 0;
   font-size: 12px;
   line-height: 1.55;
+  font-variant-numeric: tabular-nums;
 }
 
 .wind-row {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 5px;
+  min-width: 112px;
+  white-space: nowrap;
 }
 
 .reset-wind-btn {
@@ -1190,6 +1217,7 @@ button {
   background: transparent;
   border: 0;
   border-radius: 8px;
+  overscroll-behavior: contain;
 }
 
 .guide-section {
@@ -1337,5 +1365,73 @@ button {
 
   .section {
     padding: 16px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+  }
+
+  .brand strong {
+    font-size: 18px;
+  }
+
+  .brand span {
+    font-size: 11px;
+  }
+
+  .inline-action,
+  .color-tools,
+  .footer-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-two,
+  .guide-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .share-popover {
+    left: 10px;
+    right: 10px;
+    bottom: 74px;
+    width: auto;
+    max-height: calc(100dvh - 112px);
+    overflow-y: auto;
+  }
+
+  .guide-overlay {
+    padding: 10px;
+  }
+
+  .guide-section {
+    padding: 14px;
+  }
+
+  .camera-input {
+    width: 96px;
+    top: 76px;
+  }
+
+  .data-panel {
+    width: min(194px, calc(100% - 130px));
+    padding: 8px;
+  }
+
+  .data-panel p {
+    font-size: 11px;
+  }
+
+  .wind-row {
+    min-width: 104px;
+  }
+
+  .mode-switch-btn {
+    padding: 0 8px;
+    font-size: 11px;
+  }
+
+  .garden {
+    width: min(336px, 98vw);
+    transform: scale(0.94);
   }
 }

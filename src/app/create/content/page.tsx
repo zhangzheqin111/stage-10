@@ -5,11 +5,16 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { GiftBackground } from "@/components/GiftBackground";
-import { consumePreserveEdit, isReloadNavigation, shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
+import { shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
 import { GiftDraft, getDraft, normalizeBlessing, normalizeRecipientName, saveDraft, themes, ThemeKey } from "@/lib/gift";
 import { fileToDataUrl, getLocalDraft, saveLocalDraft } from "@/lib/localGiftStore";
 
 const blessingColorSwatches = ["#c7608a", "#5f9d6d", "#c99542", "#6b8fc7", "#ffffff", "#43343c"];
+
+function canUseImageFile(file: File) {
+  const normalizedName = file.name.toLowerCase();
+  return file.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|heic|heif)$/.test(normalizedName);
+}
 
 export default function ContentPage() {
   const router = useRouter();
@@ -27,21 +32,9 @@ export default function ContentPage() {
     getLocalDraft()
       .then((savedDraft) => {
         const baseDraft = (savedDraft ?? getDraft()) as GiftDraft;
-        const shouldPreserveEdit = consumePreserveEdit();
-        const shouldClearMedia = isReloadNavigation() && !shouldPreserveEdit;
-        const nextDraft = shouldClearMedia
-          ? {
-              ...baseDraft,
-              audioUrl: undefined,
-              backgroundImageUrl: undefined,
-              backgroundPositionX: 50,
-              backgroundPositionY: 0,
-              backgroundScale: 100
-            }
-          : baseDraft;
-        setDraft(nextDraft);
-        saveDraft(nextDraft);
-        saveLocalDraft(nextDraft);
+        setDraft(baseDraft);
+        saveDraft(baseDraft);
+        void saveLocalDraft(baseDraft);
       })
       .catch(() => setDraft(getDraft()));
   }, [router]);
@@ -58,7 +51,7 @@ export default function ContentPage() {
     startCreationFlow();
     setDraft(merged);
     saveDraft(merged);
-    saveLocalDraft(merged);
+    void saveLocalDraft(merged);
   }
 
   async function handleImageUpload(file?: File) {
@@ -66,7 +59,7 @@ export default function ContentPage() {
       return;
     }
 
-    if (!file.type.startsWith("image/")) {
+    if (!canUseImageFile(file)) {
       setImageMessage("请上传图片文件。");
       return;
     }
@@ -76,9 +69,15 @@ export default function ContentPage() {
       return;
     }
 
-    const backgroundImageUrl = await fileToDataUrl(file);
-    update({ backgroundImageUrl, backgroundPositionX: 50, backgroundPositionY: 0, backgroundScale: 100 });
-    setImageMessage("背景图片已保存到礼物草稿。");
+    setImageMessage("正在读取图片...");
+
+    try {
+      const backgroundImageUrl = await fileToDataUrl(file);
+      update({ backgroundImageUrl, backgroundPositionX: 50, backgroundPositionY: 0, backgroundScale: 100 });
+      setImageMessage("背景图片已保存到礼物草稿。");
+    } catch {
+      setImageMessage("图片读取失败，请重新选择图片。");
+    }
   }
 
   return (

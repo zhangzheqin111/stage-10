@@ -120,12 +120,12 @@ export function getDraft(): GiftDraft {
     return defaultGift;
   }
 
-  const raw = window.localStorage.getItem(storageKey);
-  if (!raw) {
-    return defaultGift;
-  }
-
   try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return defaultGift;
+    }
+
     return { ...defaultGift, ...JSON.parse(raw) } as GiftDraft;
   } catch {
     return defaultGift;
@@ -140,7 +140,11 @@ export function saveDraft(nextDraft: Partial<GiftDraft>) {
   const current = getDraft();
   const merged = { ...current, ...nextDraft };
   const { audioUrl, backgroundImageUrl, ...lightDraft } = merged;
-  window.localStorage.setItem(storageKey, JSON.stringify(lightDraft));
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(lightDraft));
+  } catch {
+    // Some mobile in-app browsers restrict localStorage; IndexedDB / memory fallback keeps the flow usable.
+  }
 }
 
 export function clearDraft() {
@@ -148,5 +152,9 @@ export function clearDraft() {
     return;
   }
 
-  window.localStorage.removeItem(storageKey);
+  try {
+    window.localStorage.removeItem(storageKey);
+  } catch {
+    // Ignore restricted storage during reset.
+  }
 }

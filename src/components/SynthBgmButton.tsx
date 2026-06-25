@@ -77,6 +77,11 @@ export function SynthBgmButton({ audioUrl, autoStart = true, volume }: { audioUr
     }
 
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      setBlocked(true);
+      setPlaying(false);
+      return;
+    }
     const context = new AudioContextClass();
     await context.resume();
 

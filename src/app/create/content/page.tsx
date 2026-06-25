@@ -8,19 +8,33 @@ import { AppHeader } from "@/components/AppHeader";
 import { GiftBackground } from "@/components/GiftBackground";
 import { shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
 import { GiftDraft, getDraft, normalizeBlessing, normalizeRecipientName, saveDraft, themes, ThemeKey } from "@/lib/gift";
-import { fileToDataUrl, getLocalDraft, saveLocalDraft } from "@/lib/localGiftStore";
+import { compressImage } from "@/lib/localGiftStore";
 
 const blessingColorSwatches = ["#c7608a", "#5f9d6d", "#c99542", "#6b8fc7", "#ffffff", "#43343c"];
 
 function canUseImageFile(file: File) {
+  // 移动端（微信/QQ/UC 内置浏览器）常不设 file.type，故优先看扩展名
   const normalizedName = file.name.toLowerCase();
-  return file.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|heic|heif)$/.test(normalizedName);
+  if (/\.(png|jpe?g|gif|webp|bmp|heic|heif|svg)$/.test(normalizedName)) {
+    return true;
+  }
+  // 有 MIME type 则按 type 匹配
+  if (file.type && file.type.startsWith("image/")) {
+    return true;
+  }
+  // type 为空但 size>0 —— 大概率是图片（移动端图库选择场景），放行
+  // accept="image/*" 已做第一层过滤
+  if (!file.type && file.size > 0) {
+    return true;
+  }
+  return false;
 }
 
 export default function ContentPage() {
   const router = useRouter();
   const [draft, setDraft] = useState<GiftDraft>(getDraft());
   const [imageMessage, setImageMessage] = useState("");
+  const [imageFileName, setImageFileName] = useState("");
   const [colorMessage, setColorMessage] = useState("");
   const colorInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -30,14 +44,9 @@ export default function ContentPage() {
       return;
     }
 
-    getLocalDraft()
-      .then((savedDraft) => {
-        const baseDraft = (savedDraft ?? getDraft()) as GiftDraft;
-        setDraft(baseDraft);
-        saveDraft(baseDraft);
-        void saveLocalDraft(baseDraft);
-      })
-      .catch(() => setDraft(getDraft()));
+    // 同步读 localStorage，立刻拿到 draft（含上传的图片/音频 data URL）
+    const baseDraft = getDraft();
+    setDraft(baseDraft);
   }, [router]);
 
   function update(next: Partial<GiftDraft>) {
@@ -51,8 +60,8 @@ export default function ContentPage() {
     }
     startCreationFlow();
     setDraft(merged);
+    // 同步写入 localStorage
     saveDraft(merged);
-    void saveLocalDraft(merged);
   }
 
   async function handleImageUpload(file?: File) {
@@ -65,19 +74,21 @@ export default function ContentPage() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setImageMessage("图片超过 5MB，请压缩后再上传。");
+    if (file.size > 100 * 1024) {
+      setImageMessage("图片超过 100KB，请压缩后再上传。");
       return;
     }
 
-    setImageMessage("正在读取图片...");
+    setImageMessage("正在压缩图片...");
 
     try {
-      const backgroundImageUrl = await fileToDataUrl(file);
-      update({ backgroundImageUrl, backgroundPositionX: 50, backgroundPositionY: 0, backgroundScale: 100 });
+      const backgroundImageUrl = await compressImage(file, 800, 0.75);
+      update({ backgroundImageUrl, backgroundPositionX: 50, backgroundPositionY: 50, backgroundScale: 100 });
+      setImageFileName(file.name);
       setImageMessage("背景图片已保存到礼物草稿。");
-    } catch {
-      setImageMessage("图片读取失败，请重新选择一张 5MB 以内的常见图片格式。");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "未知错误";
+      setImageMessage(`图片读取失败（${msg}），请重新选择一张 100KB 以内的常见图片格式。`);
     }
   }
 
@@ -87,7 +98,7 @@ export default function ContentPage() {
         <AppHeader step="2 / 3 礼物内容" />
         <section className="section soft-card stack">
           <div>
-            <h1>花之物语：把心声装进礼物</h1>
+            <h1 className="page-title">花之物语：把心声装进礼物</h1>
             <p className="lead">创造你的个性化礼物</p>
           </div>
 
@@ -116,13 +127,20 @@ export default function ContentPage() {
 
           <div className="field">
             <label>背景图片</label>
-            <input
-              className="input"
-              accept="image/*"
-              onChange={(event) => handleImageUpload(event.target.files?.[0])}
-              type="file"
-            />
-            <p className="hint">可上传 5MB 以内图片；不上传时默认为纯色主题背景。</p>
+            <label className="upload-image-box">
+              <input
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  setImageFileName(file?.name ?? "");
+                  handleImageUpload(file);
+                }}
+                type="file"
+              />
+              <span className="upload-image-glyph" aria-hidden="true">▢</span>
+              <span className="upload-image-label">{imageFileName || "点击上传背景图片"}</span>
+            </label>
+            <p className="hint">可上传 100KB 以内图片；不上传时默认为纯色主题背景。</p>
             {imageMessage ? <p className="hint">{imageMessage}</p> : null}
             <div className="image-crop-control">
               <div
@@ -173,14 +191,15 @@ export default function ContentPage() {
                 </label>
                 <button
                   className="secondary-btn"
-                  onClick={() =>
+                  onClick={() => {
+                    setImageFileName("");
                     update({
                       backgroundImageUrl: undefined,
                       backgroundPositionX: 50,
-                      backgroundPositionY: 0,
+                      backgroundPositionY: 50,
                       backgroundScale: 100
-                    })
-                  }
+                    });
+                  }}
                   type="button"
                 >
                   恢复主题默认背景

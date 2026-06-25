@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BgmPlayer, BgmPresetId, getBgmPreset, playBgmPreset } from "@/lib/systemBgm";
 
-export function SynthBgmButton({ audioUrl, autoStart = true, volume }: { audioUrl?: string; autoStart?: boolean; volume: number }) {
+export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume }: { audioUrl?: string; bgmPresetId?: string; autoStart?: boolean; volume: number }) {
   const [playing, setPlaying] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const audioRef = useRef<{
     context: AudioContext;
     gain: GainNode;
     oscillators: OscillatorNode[];
+    bgmPlayer?: BgmPlayer;
   } | null>(null);
   const mediaRef = useRef<HTMLAudioElement | null>(null);
   const volumeRef = useRef(volume);
@@ -16,7 +18,7 @@ export function SynthBgmButton({ audioUrl, autoStart = true, volume }: { audioUr
   useEffect(() => {
     volumeRef.current = volume;
     if (audioRef.current) {
-      audioRef.current.gain.gain.setTargetAtTime(volume / 1000, audioRef.current.context.currentTime, 0.08);
+      audioRef.current.gain.gain.setTargetAtTime(volume / 100, audioRef.current.context.currentTime, 0.08);
     }
     if (mediaRef.current) {
       mediaRef.current.volume = volume / 100;
@@ -36,6 +38,11 @@ export function SynthBgmButton({ audioUrl, autoStart = true, volume }: { audioUr
     if (!audio) {
       setPlaying(false);
       return;
+    }
+
+    // 停止预设 BGM
+    if (audio.bgmPlayer) {
+      audio.bgmPlayer.stop();
     }
 
     const now = audio.context.currentTime;
@@ -86,26 +93,43 @@ export function SynthBgmButton({ audioUrl, autoStart = true, volume }: { audioUr
     await context.resume();
 
     const gain = context.createGain();
-    gain.gain.value = volumeRef.current / 1000;
+    gain.gain.value = volumeRef.current / 100;
     gain.connect(context.destination);
 
-    const notes = [261.63, 329.63, 392, 523.25];
-    const oscillators = notes.map((note, index) => {
-      const oscillator = context.createOscillator();
-      const noteGain = context.createGain();
-      oscillator.type = index === 0 ? "sine" : "triangle";
-      oscillator.frequency.value = note;
-      noteGain.gain.value = index === 0 ? 0.32 : 0.12;
-      oscillator.connect(noteGain);
-      noteGain.connect(gain);
-      oscillator.start();
-      return oscillator;
-    });
+    let bgmPlayer: BgmPlayer | undefined;
 
-    audioRef.current = { context, gain, oscillators };
+    // 尝试加载预设 BGM
+    if (bgmPresetId) {
+      const preset = getBgmPreset(bgmPresetId as BgmPresetId);
+      if (preset) {
+        bgmPlayer = playBgmPreset(preset, context, gain);
+      }
+    }
+
+    // 兜底：如果没预设，播放默认四音和弦
+    if (!bgmPlayer) {
+      const notes = [261.63, 329.63, 392, 523.25];
+      const oscillators = notes.map((note, index) => {
+        const oscillator = context.createOscillator();
+        const noteGain = context.createGain();
+        oscillator.type = index === 0 ? "sine" : "triangle";
+        oscillator.frequency.value = note;
+        noteGain.gain.value = index === 0 ? 0.32 : 0.12;
+        oscillator.connect(noteGain);
+        noteGain.connect(gain);
+        oscillator.start();
+        return oscillator;
+      });
+
+      audioRef.current = { context, gain, oscillators };
+    } else {
+      // 预设模式下仍需创建振荡器数组以避免 stop 时出错
+      audioRef.current = { context, gain, oscillators: [], bgmPlayer };
+    }
+
     setBlocked(false);
     setPlaying(true);
-  }, [audioUrl]);
+  }, [audioUrl, bgmPresetId]);
 
   useEffect(() => {
     if (!autoStart) {
@@ -137,7 +161,27 @@ export function SynthBgmButton({ audioUrl, autoStart = true, volume }: { audioUr
       aria-label={playing ? "静音" : "播放音乐"}
       title={playing ? "静音" : blocked ? "点击播放" : "播放音乐"}
     >
-      <span className="speaker-shape" />
+      {playing ? (
+        <>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path
+              d="M4 9v6h4l5 4V5L8 9H4Zm12.5 3a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 16.5 12Zm-2.5-7.93v2.06a6.5 6.5 0 0 1 0 11.74v2.06a8.5 8.5 0 0 0 0-15.86Z"
+              fill="currentColor"
+            />
+          </svg>
+          音乐
+        </>
+      ) : (
+        <>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path
+              d="M4 9v6h4l5 4V5L8 9H4Zm15.7 3 2.15-2.15-1.4-1.4L18 10.6l-2.45-2.15-1.4 1.4L16.3 12l-2.15 2.15 1.4 1.4L18 13.4l2.45 2.15 1.4-1.4L19.7 12Z"
+              fill="currentColor"
+            />
+          </svg>
+          静音
+        </>
+      )}
     </button>
   );
 }

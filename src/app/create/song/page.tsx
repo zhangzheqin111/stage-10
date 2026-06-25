@@ -5,19 +5,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
-import { getDraft, saveDraft } from "@/lib/gift";
-import { fileToDataUrl, getLocalDraft, saveLocalDraft } from "@/lib/localGiftStore";
+import { GiftDraft, getDraft, saveDraft } from "@/lib/gift";
+import { fileToDataUrl } from "@/lib/localGiftStore";
 import { MockMusicTrack, parseMockMusicLink, searchMockMusic } from "@/lib/mockMusic";
+import { BgmPreset, previewBgmPreset, SYSTEM_BGM_PRESETS } from "@/lib/systemBgm";
 
 type ParseMusicLinkResult =
   | { ok: true; track: MockMusicTrack; message: string }
   | { ok: false; message: string };
-
-const bgms = [
-  { title: "晨光花园", artist: "BloomBeat 系统 BGM", mood: "轻柔、明亮", notes: [261.63, 329.63, 392] },
-  { title: "晚风信笺", artist: "BloomBeat 系统 BGM", mood: "安静、温柔", notes: [220, 293.66, 349.23] },
-  { title: "星光音乐盒", artist: "BloomBeat 系统 BGM", mood: "梦幻、礼物感", notes: [329.63, 392, 523.25] }
-];
 
 const previewDurationMs = 10000;
 
@@ -92,6 +87,7 @@ export default function SongPage() {
   const previewRef = useRef<{ context: AudioContext; oscillators: OscillatorNode[] } | null>(null);
   const mediaPreviewRef = useRef<HTMLAudioElement | null>(null);
   const previewTimerRef = useRef<number | null>(null);
+  const bgmPreviewStopRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (shouldStartFromGuide()) {
@@ -99,25 +95,15 @@ export default function SongPage() {
       return;
     }
 
-    getLocalDraft()
-      .then((draft) => {
-        const visibleDraft = draft ?? getDraft();
-
-        if (visibleDraft.musicSelected) {
-          setSelected(visibleDraft.songTitle);
-          setSelectedArtist(visibleDraft.artist);
-        }
-        if (visibleDraft.audioUrl) {
-          setUploadedAudio({ title: visibleDraft.songTitle, audioUrl: visibleDraft.audioUrl });
-        }
-      })
-      .catch(() => {
-        const nextDraft = getDraft();
-        if (nextDraft.musicSelected) {
-          setSelected(nextDraft.songTitle);
-          setSelectedArtist(nextDraft.artist);
-        }
-      });
+    // 同步读 localStorage（不再依赖异步 IndexedDB），立刻拿到 draft
+    const visibleDraft = getDraft();
+    if (visibleDraft.musicSelected) {
+      setSelected(visibleDraft.songTitle);
+      setSelectedArtist(visibleDraft.artist);
+    }
+    if (visibleDraft.audioUrl) {
+      setUploadedAudio({ title: visibleDraft.songTitle, audioUrl: visibleDraft.audioUrl });
+    }
   }, [router]);
 
   useEffect(() => stopPreview, []);
@@ -126,6 +112,12 @@ export default function SongPage() {
     if (previewTimerRef.current) {
       window.clearTimeout(previewTimerRef.current);
       previewTimerRef.current = null;
+    }
+
+    // 停止系统 BGM 预设试听（新）
+    if (bgmPreviewStopRef.current) {
+      bgmPreviewStopRef.current();
+      bgmPreviewStopRef.current = null;
     }
 
     if (mediaPreviewRef.current) {
@@ -150,7 +142,7 @@ export default function SongPage() {
     previewRef.current = null;
   }
 
-  function playPreview(song: (typeof bgms)[number]) {
+  function playPreview(song: { title: string; artist: string; mood: string; notes: number[] }) {
     stopPreview();
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) {
@@ -179,6 +171,14 @@ export default function SongPage() {
     previewTimerRef.current = window.setTimeout(stopPreview, previewDurationMs);
   }
 
+  /**
+   * 使用新预设引擎试听系统 BGM（6 种预设音色）。
+   */
+  function playBgmPreview(preset: BgmPreset) {
+    stopPreview();
+    bgmPreviewStopRef.current = previewBgmPreset(preset, previewDurationMs);
+  }
+
   async function playUploadedPreview(audioUrl: string) {
     stopPreview();
     const audio = new Audio(audioUrl);
@@ -197,26 +197,33 @@ export default function SongPage() {
     });
   }
 
-  async function chooseSong(song: (typeof bgms)[number]) {
+  async function chooseBgm(preset: BgmPreset) {
+    console.log("[song] chooseBgm 点击", preset.title);
     const currentDraft = getDraft();
     const nextDraft = {
       ...currentDraft,
       songSourceType: "default" as const,
       musicSelected: true,
-      songTitle: song.title,
-      artist: song.artist,
+      songTitle: preset.title,
+      artist: "BloomBeat 系统 BGM",
+      bgmPresetId: preset.id,
       audioUrl: undefined
     };
     startCreationFlow();
-    setSelected(song.title);
-    setSelectedArtist(song.artist);
-    setUploadMessage(`已选择系统 BGM：${song.title}。`);
-    saveDraft(nextDraft);
-    void getLocalDraft().then((draft) => saveLocalDraft({ ...(draft ?? nextDraft), ...nextDraft }));
+    setSelected(preset.title);
+    setSelectedArtist("BloomBeat 系统 BGM");
+    setUploadMessage(`已选择系统 BGM：${preset.title}（${preset.instrument}）。`);
+    // 同步写入 localStorage，立即可读
     try {
-      playPreview(song);
+      saveDraft(nextDraft);
+      console.log("[song] saveDraft 成功，localStorage 大小：", window.localStorage.getItem("bloombeat-draft")?.length ?? 0);
+    } catch (err) {
+      console.error("[song] saveDraft 失败", err);
+    }
+    try {
+      playBgmPreview(preset);
     } catch {
-      setUploadMessage(`已选择系统 BGM：${song.title}，但当前浏览器需要再次点击后才能试听。`);
+      setUploadMessage(`已选择系统 BGM：${preset.title}，但当前浏览器需要再次点击后才能试听。`);
     }
   }
 
@@ -228,14 +235,15 @@ export default function SongPage() {
       musicSelected: true,
       songTitle: audio.title,
       artist: "用户上传音频",
-      audioUrl: audio.audioUrl
+      audioUrl: audio.audioUrl,
+      bgmPresetId: undefined
     };
 
     startCreationFlow();
     setSelected(audio.title);
     setSelectedArtist("用户上传音频");
-    saveDraft({ songSourceType: "upload", musicSelected: true, songTitle: audio.title, artist: "用户上传音频" });
-    void getLocalDraft().then((draft) => saveLocalDraft({ ...(draft ?? nextDraft), ...nextDraft }));
+    // 同步写入 localStorage（包含 audioUrl data URL）
+    saveDraft(nextDraft);
     setUploadMessage("已重新使用上传音频作为背景音乐。");
     playUploadedPreview(audio.audioUrl).catch(() => setUploadMessage("已使用上传音频，但浏览器需要点击页面后才能试听。"));
   }
@@ -248,7 +256,8 @@ export default function SongPage() {
       musicSelected: true,
       songTitle: track.title,
       artist: `${track.artist} · ${track.platform}`,
-      audioUrl: undefined
+      audioUrl: undefined,
+      bgmPresetId: undefined
     } as const;
 
     startCreationFlow();
@@ -257,8 +266,8 @@ export default function SongPage() {
     if (sourceType === "link") {
       setResolvedTrack(track);
     }
+    // 同步写入 localStorage
     saveDraft(nextDraft);
-    void getLocalDraft().then((draft) => saveLocalDraft({ ...(draft ?? nextDraft), ...nextDraft }));
     setUploadMessage(`已选择：${track.title}。`);
     try {
       playMockPreview(track);
@@ -302,31 +311,36 @@ export default function SongPage() {
       return;
     }
 
-    if (file.size > 15 * 1024 * 1024) {
-      setUploadMessage("音频超过 15MB，请更换文件或选择默认 BGM。");
+    if (file.size > 2 * 1024 * 1024) {
+      setUploadMessage("音频超过 2MB，请压缩或裁剪后重新上传。");
       return;
     }
 
-    const audioUrl = await fileToDataUrl(file);
-    const title = file.name.replace(/\.[^.]+$/, "");
-    stopPreview();
-    startCreationFlow();
-    setUploadedAudio({ title, audioUrl });
-    setSelected(title);
-    const currentDraft = getDraft();
-    const nextDraft = {
-      ...currentDraft,
-      songSourceType: "upload",
-      musicSelected: true,
-      songTitle: title,
-      artist: "用户上传音频",
-      audioUrl
-    } as const;
-    saveDraft({ songSourceType: "upload", musicSelected: true, songTitle: title, artist: "用户上传音频" });
-    void getLocalDraft().then((draft) => saveLocalDraft({ ...(draft ?? nextDraft), ...nextDraft }));
-    setSelectedArtist("用户上传音频");
-    setUploadMessage("音频已保存到本地礼物草稿，生成链接后可在本机新窗口打开。");
-    playUploadedPreview(audioUrl).catch(() => setUploadMessage("音频已保存；浏览器需要点击页面后才能试听。"));
+    setUploadMessage("正在读取音频...");
+
+    try {
+      const audioUrl = await fileToDataUrl(file);
+      const title = file.name.replace(/\.[^.]+$/, "");
+      stopPreview();
+      startCreationFlow();
+      setUploadedAudio({ title, audioUrl });
+      setSelected(title);
+      // 同步写入 localStorage（含 audioUrl），保证预览/礼物页能立刻读到
+      saveDraft({
+        songSourceType: "upload",
+        musicSelected: true,
+        songTitle: title,
+        artist: "用户上传音频",
+        audioUrl,
+        bgmPresetId: undefined
+      });
+      setSelectedArtist("用户上传音频");
+      setUploadMessage("音频已保存到礼物草稿，可进入下一步。");
+      playUploadedPreview(audioUrl).catch(() => setUploadMessage("音频已保存；浏览器需要点击页面后才能试听。"));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "未知错误";
+      setUploadMessage(`音频读取失败（${msg}），请重新选择一个 2MB 以内的常见音频格式。`);
+    }
   }
 
   return (
@@ -335,7 +349,7 @@ export default function SongPage() {
         <AppHeader step="1 / 3 选择音乐" />
         <section className="section soft-card stack">
           <div>
-            <h1>将音乐卡带放进你的礼物盒~</h1>
+            <h1 className="page-title">将音乐卡带放进你的礼物盒~</h1>
             <p className="lead">可以通过下列四种方式选一首最想送给 TA 的歌。</p>
           </div>
 
@@ -436,7 +450,7 @@ export default function SongPage() {
               />
               <span>{uploadFileName || "点击上传本地音乐文件"}</span>
             </label>
-            <p className="hint">支持 mp3 / wav / m4a，文件大小不超过 15MB。</p>
+            <p className="hint">支持 mp3 / wav / m4a，文件大小不超过 2MB。</p>
             {uploadMessage ? <p className="hint">{uploadMessage}</p> : null}
             {uploadedAudio ? (
               <div className="music-result">
@@ -454,16 +468,29 @@ export default function SongPage() {
 
           <div className="field">
             <span className="field-title">方式四：系统 BGM</span>
-            <div className="stack">
-              {bgms.map((song) => (
+            <p className="hint">选择一种音色作为礼物背景音乐。</p>
+            <div className="bgm-preset-grid">
+              {SYSTEM_BGM_PRESETS.map((preset) => (
                 <button
-                  className={`option-card ${selected === song.title ? "active" : ""}`}
-                  key={song.title}
-                  onClick={() => chooseSong(song)}
+                  className={`bgm-preset-card ${selected === preset.title ? "active" : ""}`}
+                  key={preset.id}
+                  onClick={() => chooseBgm(preset)}
                   type="button"
                 >
-                  <strong>{song.title}</strong>
-                  <p className="hint">{song.mood}</p>
+                  <span className="bgm-preset-cover" style={{ background: preset.colorGradient }}>
+                    <span className="bgm-preset-play-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="16" height="16">
+                        <path d="M8 5v14l11-7z" fill="currentColor" />
+                      </svg>
+                    </span>
+                  </span>
+                  <span className="bgm-preset-body">
+                    <strong>{preset.title}</strong>
+                    <span className="bgm-preset-tags">
+                      <span className="bgm-preset-tag">{preset.instrument}</span>
+                      <span className="bgm-preset-tag bgm-preset-tag--mood">{preset.mood}</span>
+                    </span>
+                  </span>
                 </button>
               ))}
             </div>

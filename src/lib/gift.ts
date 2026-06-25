@@ -8,6 +8,7 @@ export type GiftDraft = {
   musicSelected?: boolean;
   songTitle: string;
   artist: string;
+  bgmPresetId?: string;
   audioUrl?: string;
   backgroundImageUrl?: string;
   backgroundPositionX: number;
@@ -158,7 +159,7 @@ export const defaultGift: GiftDraft = {
   audioUrl: undefined,
   backgroundImageUrl: undefined,
   backgroundPositionX: 50,
-  backgroundPositionY: 0,
+  backgroundPositionY: 50,
   backgroundScale: 100,
   blessingText: "愿今天的风和花，都把温柔送到你身边。",
   blessingColor: "#c7608a",
@@ -170,6 +171,26 @@ export const defaultGift: GiftDraft = {
 };
 
 const storageKey = "bloombeat-draft";
+const maxLocalStorageBytes = 4 * 1024 * 1024; // 4MB 安全线，避开 5MB 严格上限
+
+type WindowWithDraft = Window & { __bloombeatPreviewDraft?: GiftDraft | null };
+
+/**
+ * 将完整 draft（含上传的 audioUrl / backgroundImageUrl）存到 window 全局缓存，
+ * 使同一 browser session 内的页面（preview → gift/demo）能读到完整数据。
+ */
+function setPreviewCache(draft: GiftDraft) {
+  if (typeof window === "undefined") return;
+  (window as WindowWithDraft).__bloombeatPreviewDraft = draft;
+}
+
+/**
+ * 从 window 全局缓存读取完整 draft。
+ */
+function getPreviewCache(): GiftDraft | null {
+  if (typeof window === "undefined") return null;
+  return (window as WindowWithDraft).__bloombeatPreviewDraft ?? null;
+}
 
 export function normalizeRecipientName(value: string) {
   const trimmed = value.trim().slice(0, 15);
@@ -185,16 +206,34 @@ export function getDraft(): GiftDraft {
     return defaultGift;
   }
 
+  let fromStorage = defaultGift;
   try {
     const raw = window.localStorage.getItem(storageKey);
-    if (!raw) {
-      return defaultGift;
+    if (raw) {
+      fromStorage = { ...defaultGift, ...JSON.parse(raw) } as GiftDraft;
     }
-
-    return { ...defaultGift, ...JSON.parse(raw) } as GiftDraft;
   } catch {
-    return defaultGift;
+    // Ignore parse errors
   }
+
+  // 尝试从 window 缓存恢复 audioUrl / backgroundImageUrl
+  // （这两个字段可能因超过 localStorage 4MB 限制而被静默截断）
+  try {
+    const cached = getPreviewCache();
+    if (cached) {
+      // 只恢复缓存里有但 localStorage 里没有的大字段
+      if (cached.audioUrl && !fromStorage.audioUrl) {
+        fromStorage.audioUrl = cached.audioUrl;
+      }
+      if (cached.backgroundImageUrl && !fromStorage.backgroundImageUrl) {
+        fromStorage.backgroundImageUrl = cached.backgroundImageUrl;
+      }
+    }
+  } catch {
+    // 缓存读取失败不影响主流程
+  }
+
+  return fromStorage;
 }
 
 export function saveDraft(nextDraft: Partial<GiftDraft>) {
@@ -204,11 +243,33 @@ export function saveDraft(nextDraft: Partial<GiftDraft>) {
 
   const current = getDraft();
   const merged = { ...current, ...nextDraft };
+
+  // 同步写入 window 全局缓存（含完整 audioUrl / backgroundImageUrl），
+  // 保证同一 browser session 内 preview → gift/demo 能读到完整数据。
+  setPreviewCache(merged);
+
+  // 同步写入完整 draft（含 audioUrl / backgroundImageUrl），保证预览页能立刻读到上传资源
+  try {
+    const serialized = JSON.stringify(merged);
+    if (serialized.length <= maxLocalStorageBytes) {
+      window.localStorage.setItem(storageKey, serialized);
+      return;
+    }
+  } catch {
+    // localStorage 写入异常（quota 满），继续走下面的截断版本
+  }
+
+  // 超大（>4MB），通常是音频太长 / 图片太大；截断音频和图片但保留其他字段
+  // 关键：如果是因为上传音频导致的超大，同时清除 bgmPresetId，
+  // 避免系统 BGM 错误接替本该播放的上传音频。
   const { audioUrl, backgroundImageUrl, ...lightDraft } = merged;
+  if (merged.songSourceType === "upload" && merged.audioUrl) {
+    (lightDraft as Record<string, unknown>).bgmPresetId = undefined;
+  }
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(lightDraft));
   } catch {
-    // Some mobile in-app browsers restrict localStorage; IndexedDB / memory fallback keeps the flow usable.
+    // Some mobile in-app browsers restrict localStorage; in-memory state in the page itself still works.
   }
 }
 

@@ -91,6 +91,15 @@ export default function GiftPage() {
     return () => { cancelled = true; };
   }, [params.id]);
 
+  useEffect(() => {
+    if (!audioHint) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setAudioHint(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [audioHint]);
+
   if (missing) {
     return (
       <main className="app-shell">
@@ -126,13 +135,6 @@ export default function GiftPage() {
       </main>
     );
   }
-
-  useEffect(() => {
-    if (audioHint) {
-      const timer = window.setTimeout(() => setAudioHint(""), 6000);
-      return () => window.clearTimeout(timer);
-    }
-  }, [audioHint]);
 
   async function handleShare() {
     const shareUrl = currentShareUrl || window.location.href;

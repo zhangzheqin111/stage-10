@@ -7,10 +7,12 @@ import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { GiftBackground } from "@/components/GiftBackground";
 import { shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
-import { GiftDraft, getDraft, normalizeBlessing, normalizeRecipientName, saveDraft, themes, ThemeKey } from "@/lib/gift";
-import { compressImage } from "@/lib/localGiftStore";
+import { GiftDraft, getDraft, normalizeBlessing, saveDraft, themes, ThemeKey } from "@/lib/gift";
+import { compressImage, saveLocalDraft } from "@/lib/localGiftStore";
 
 const blessingColorSwatches = ["#c7608a", "#5f9d6d", "#c99542", "#6b8fc7", "#ffffff", "#43343c"];
+const maxBackgroundUploadSize = 8 * 1024 * 1024;
+const maxBackgroundUploadSizeLabel = "8MB";
 
 function canUseImageFile(file: File) {
   // 移动端（微信/QQ/UC 内置浏览器）常不设 file.type，故优先看扩展名
@@ -52,8 +54,10 @@ export default function ContentPage() {
   function update(next: Partial<GiftDraft>) {
     const merged = { ...draft, ...next };
     if (next.recipientName !== undefined) {
-      merged.recipientName = normalizeRecipientName(next.recipientName);
-      merged.title = `给${merged.recipientName}的礼物`;
+      const editableName = next.recipientName.slice(0, 15);
+      const displayName = editableName.trim() || "TA";
+      merged.recipientName = editableName;
+      merged.title = `给${displayName}的礼物`;
     }
     if (next.blessingText !== undefined) {
       merged.blessingText = normalizeBlessing(next.blessingText);
@@ -62,6 +66,7 @@ export default function ContentPage() {
     setDraft(merged);
     // 同步写入 localStorage
     saveDraft(merged);
+    saveLocalDraft(merged).catch(() => undefined);
   }
 
   async function handleImageUpload(file?: File) {
@@ -74,8 +79,8 @@ export default function ContentPage() {
       return;
     }
 
-    if (file.size > 100 * 1024) {
-      setImageMessage("图片超过 100KB，请压缩后再上传。");
+    if (file.size > maxBackgroundUploadSize) {
+      setImageMessage(`图片超过 ${maxBackgroundUploadSizeLabel}，请压缩后再上传。`);
       return;
     }
 
@@ -88,7 +93,7 @@ export default function ContentPage() {
       setImageMessage("背景图片已保存到礼物草稿。");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "未知错误";
-      setImageMessage(`图片读取失败（${msg}），请重新选择一张 100KB 以内的常见图片格式。`);
+      setImageMessage(`图片读取失败（${msg}），请重新选择一张 ${maxBackgroundUploadSizeLabel} 以内的常见图片格式。`);
     }
   }
 
@@ -96,7 +101,15 @@ export default function ContentPage() {
     <main className="app-shell">
       <div className="phone-frame">
         <AppHeader step="2 / 3 礼物内容" />
-        <section className="section soft-card stack">
+        <section
+          className="section soft-card stack"
+          style={
+            {
+              "--theme-accent": themes[draft.theme].accent,
+              "--theme-wash": themes[draft.theme].wash
+            } as CSSProperties
+          }
+        >
           <div>
             <h1 className="page-title">花之物语：把心声装进礼物</h1>
             <p className="lead">创造你的个性化礼物</p>
@@ -111,7 +124,7 @@ export default function ContentPage() {
               placeholder="TA"
               value={draft.recipientName}
             />
-            <p className="hint">最多15字，不填时默认为TA。</p>
+            <p className="hint">最多 15 字，可清空；预览时会默认显示为 TA。</p>
           </div>
 
           <div className="field">
@@ -140,7 +153,7 @@ export default function ContentPage() {
               <span className="upload-image-glyph" aria-hidden="true">▢</span>
               <span className="upload-image-label">{imageFileName || "点击上传背景图片"}</span>
             </label>
-            <p className="hint">可上传 100KB 以内图片；不上传时默认为纯色主题背景。</p>
+            <p className="hint">可上传 {maxBackgroundUploadSizeLabel} 以内图片；不上传时默认使用当前主题背景。</p>
             {imageMessage ? <p className="hint">{imageMessage}</p> : null}
             <div className="image-crop-control">
               <div

@@ -16,11 +16,11 @@ export function GiftBackground({ gift }: { gift: GiftDraft }) {
       style={
         {
           "--theme-wash": theme.wash,
-          "--image-wash": backgroundImageUrl ? theme.mask : theme.wash,
+          "--image-wash": "transparent",
           "--theme-glow": theme.glow,
-          backgroundImage: backgroundImageUrl ? `url(${backgroundImageUrl}), ${theme.gradient}` : theme.gradient,
-          backgroundPosition: backgroundImageUrl ? `${backgroundPositionX}% ${backgroundPositionY}%, center` : "center",
-          backgroundSize: backgroundImageUrl ? `auto ${backgroundScale}%, cover` : "cover",
+          backgroundImage: backgroundImageUrl ? `url(${backgroundImageUrl})` : theme.gradient,
+          backgroundPosition: backgroundImageUrl ? `${backgroundPositionX}% ${backgroundPositionY}%` : "center",
+          backgroundSize: backgroundImageUrl ? `auto ${backgroundScale}%` : "cover",
           backgroundRepeat: "no-repeat"
         } as CSSProperties
       }

@@ -473,6 +473,13 @@ button {
   border: 1px solid var(--line);
 }
 
+.secondary-btn.copy-done {
+  color: #2e7048;
+  border-color: rgba(91, 168, 121, 0.46);
+  background: rgba(224, 248, 232, 0.9);
+  box-shadow: 0 10px 24px rgba(91, 168, 121, 0.18);
+}
+
 .ghost-btn {
   color: var(--muted);
   background: transparent;
@@ -696,7 +703,7 @@ button {
 
 .range {
   width: 100%;
-  accent-color: #d883a2;
+  accent-color: var(--theme-accent, #d883a2);
 }
 
 .color-tools {
@@ -867,6 +874,33 @@ button {
   white-space: nowrap;
 }
 
+.marquee-toggle-fab {
+  color: var(--theme-deep, rgba(67, 52, 60, 0.78));
+  background: color-mix(in srgb, var(--theme-wash, rgba(255, 255, 255, 0.72)) 58%, white);
+}
+
+.preview-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 92px;
+  z-index: 33;
+  transform: translateX(-50%);
+  max-width: min(300px, calc(100vw - 44px));
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 999px;
+  color: rgba(67, 52, 60, 0.82);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 12px 28px rgba(91, 72, 86, 0.16);
+  backdrop-filter: blur(12px);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  pointer-events: none;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .share-popover {
   position: fixed;
   right: max(18px, calc((100vw - 430px) / 2 + 18px));
@@ -907,6 +941,19 @@ button {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 2px;
+}
+
+.share-title-field {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.share-generate-btn {
+  width: 100%;
+  min-height: 42px;
 }
 
 .preview-return {
@@ -1624,6 +1671,58 @@ button {
   white-space: nowrap;
 }
 
+.speaker-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.volume-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 32;
+  width: min(132px, calc(100vw - 28px));
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 8px;
+  color: rgba(67, 52, 60, 0.82);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 12px 28px rgba(91, 72, 86, 0.16);
+  backdrop-filter: blur(14px);
+}
+
+.volume-popover label {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.volume-slider-wrap {
+  height: 134px;
+  width: 42px;
+  display: grid;
+  place-items: center;
+}
+
+.volume-range {
+  width: 134px;
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+.volume-stop-btn {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: rgba(67, 52, 60, 0.78);
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .camera-launch-fab {
   position: absolute;
   top: 14px;
@@ -2067,4 +2166,3 @@ button {
     transform: translateY(0);
   }
 }
-

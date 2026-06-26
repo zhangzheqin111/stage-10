@@ -4,7 +4,7 @@
  */
 
 import type { GiftDraft } from "./gift";
-import { themes } from "./gift";
+import { defaultGift, themes } from "./gift";
 
 const HASH_PREFIX = "bloombeat=";
 
@@ -28,10 +28,11 @@ function sanitizeDraft(draft: GiftDraft): GiftDraft {
     backgroundScale: Number.isFinite(draft.backgroundScale) ? draft.backgroundScale : 100,
     blessingText: String(draft.blessingText ?? ""),
     blessingColor: String(draft.blessingColor || themes[theme].text),
-    blessingFontSize: Number.isFinite(draft.blessingFontSize) ? draft.blessingFontSize : 60,
-    blessingSpeed: Number.isFinite(draft.blessingSpeed) ? draft.blessingSpeed : 20,
-    blessingDensity: [15, 30, 50, 75].includes(draft.blessingDensity) ? draft.blessingDensity : 30,
-    blessingLineGap: Number.isFinite(draft.blessingLineGap) ? draft.blessingLineGap : 50,
+    blessingFontSize: Number.isFinite(draft.blessingFontSize) ? draft.blessingFontSize : defaultGift.blessingFontSize,
+    blessingSpeed: Number.isFinite(draft.blessingSpeed) ? draft.blessingSpeed : defaultGift.blessingSpeed,
+    blessingDensity: [15, 30, 50, 75].includes(draft.blessingDensity) ? draft.blessingDensity : defaultGift.blessingDensity,
+    blessingLineGap: Number.isFinite(draft.blessingLineGap) ? draft.blessingLineGap : defaultGift.blessingLineGap,
+    blessingMarqueeEnabled: draft.blessingMarqueeEnabled ?? defaultGift.blessingMarqueeEnabled,
     theme
   };
 }

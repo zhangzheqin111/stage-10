@@ -27,8 +27,7 @@ stage-1
 stage-2
 stage-2-2
 stage-3
-stage-4-1
-stage-4-2
+stage-4-1stage-4-2
 stage-4-3
 stage-5
 stage-6（当前保存点）
@@ -50,8 +49,8 @@ stage-6（当前保存点）
 - 阶段 2 已完成：本地创建与分享、图片/音频上传、IndexedDB 兜底、Supabase 云端接口预留。
 - 阶段 2-2 已完成：云端化兜底、分享体验、图片背景预览一致性、祝福颜色、草稿重置等修正。
 - 阶段 3 已完成：mock 音乐能力、四方式互斥选歌、试听控制、本地音频回选、音乐 API 适配层；尚未接真实 QQ 音乐 / 酷狗 API。
-- 阶段 4 已完成：摄像头授权引导、实时预览、摄像头 / 触摸模式显示、启动失败触摸兜底、摄像头请求降级重试、MediaPipe HandLandmarker 基础识别与花园交互映射、双手同向融合、捏合状态机、摄像头 / 触摸手动切换、手势灵敏度止血修复、摄像头状态与失败提示、摄像头真机验收诊断信息；仍需 HTTPS 或真实部署环境下真机调参。
-- 阶段 5 当前已开始并完成多个明确模块：分享链接复制反馈优化、预览页 / 礼物页加载状态补齐与最短 720ms 可见提示、小屏布局与横向溢出修复、手机端本地存储容错、创作流程 `sessionStorage` 受限容错、手机音频入口和摄像头安全上下文提示、失败态 / 空状态、四主题视觉区分强化、主题默认背景图、动画自然度和舒缓感打磨、花朵和音乐盒细节精修。全站 UI 细节统一仍待继续逐项处理。
+- 阶段 4 已完成：摄像头授权引导、实时预览、摄像头 / 触摸模式显示、启动失败触摸兜底、摄像头请求降级重试、MediaPipe HandLandmarker 基础识别与花园交互映射、双手同向融合、捏合状态机、摄像头 / 触摸手动切换、手势灵敏度止血修复、摄像头状态与失败提示、摄像头真机验收诊断信息、真机调参基础设施（`src/lib/gestureConfig.ts` 20 个阈值集中管理 + `src/components/GestureDebugPanel.tsx` 实时调参浮标 + 折叠面板 + localStorage 持久化 + 真机诊断卡）。真机手势参数仍需在 HTTPS 来源（Vercel 部署 / cloudflared 内网穿透）下由用户按体感微调并提交默认值。
+- 阶段 5 当前已开始并完成多个明确模块：分享链接复制反馈优化、预览页 / 礼物页加载状态补齐与最短 720ms 可见提示、小屏布局与横向溢出修复、手机端本地存储容错、创作流程 `sessionStorage` 受限容错、手机音频入口和摄像头安全上下文提示、失败态 / 空状态、四主题视觉区分强化、主题默认背景图、动画自然度和舒缓感打磨、花朵和音乐盒细节精修、全站 UI 细节统一精修（页面标题统一、输入框焦点态统一、图片上传控件与音乐上传控件统一、首页第一屏品牌花朵与浮动花瓣）。阶段 5 主要模块均已实现，待用户逐项实机确认。
 
 ### 音乐策略
 
@@ -309,7 +308,8 @@ SUPABASE_STORAGE_BUCKET=bloombeat-gifts
 - 已完成：主题默认背景图能力，背景优先级为用户上传图 > 主题默认图 > 主题渐变兜底。
 - 已完成：动画自然度和舒缓感打磨，祝福语、花朵、风线、音符和粒子动画都已降速并降低跳动强度。
 - 已完成：花朵和音乐盒细节精修，花瓣、花心、茎叶增加轻量高光和阴影层次，音乐盒增加顶部层次和装饰线。
-- 待继续：全站 UI 细节统一精修。
+- 已完成：全站 UI 细节统一精修，新增 `.page-title` 统一选歌页 / 内容页标题，输入框 / 按钮统一 focus 态，内容页图片上传改为自定义 `.upload-image-box` 与选歌页音乐上传控件一致，首页第一屏加入 CSS 品牌花朵和浮动花瓣并保持单一 `开始制作` 主操作。
+- 阶段 5 主要模块均已实现，待用户逐项实机确认；后续重点转向阶段 4 HTTPS 真机摄像头手势调参或阶段 2 Supabase 跨设备分享验收。
 
 ## 5. 重要文件修改记录
 
@@ -652,8 +652,109 @@ npm.cmd run build
 
 当前建议：
 
-1. 若继续阶段 5，优先处理全站 UI 细节统一精修；移动端布局、手机存储容错、AMR 提示、数据面板闪动、失败态 / 空状态、主题视觉区分、主题默认背景、动画舒缓感、花朵和音乐盒细节已处理。
+1. 阶段 5 主要模块（含全站 UI 细节统一精修）均已实现，待用户逐项实机确认；确认后可将重点转向阶段 4 HTTPS 真机摄像头手势调参。
 2. 若回补阶段 2，优先配置 Supabase 并做跨设备分享验收。
 3. 若继续阶段 3，优先接真实音乐 API 数据源或系统 BGM 编辑，不重写页面。
 4. 若继续阶段 4，优先在 HTTPS 本地入口或 HTTPS 部署环境中做真机摄像头手势调参；先看引导层诊断卡确认安全来源、权限和最近错误，再验收张开 / 握拳、初始高度基准、左右 / 上下串扰、捏合换色和摄像头 / 触摸切换。
 5. 若由其他协作者继续 vibe coding，可直接复制 `docs/12-vibe-coding-continuation-prompt.md` 的完整指令作为新会话开场。
+
+---
+
+## 8. 2026-06-26 阶段 7 收口上下文（stage-8 快照前）
+
+### 当前关键决策
+
+- `/create/preview` 定义为最终预览与发布页，不再额外跳转“礼物效果”页；制作者在同一页完成最终确认、弹幕开关、命名和分享。
+- 分享弹层中的礼物名称默认取编辑页昵称，格式为 `给XX的礼物`；昵称为空时回落 `给TA的礼物`。
+- 用户可在分享弹层编辑礼物名称，编辑后即时同步礼品卡题目、草稿和后续分享链接。
+- 分享链接优先尝试云端保存；云端未配置时降级生成 `/gift/share#bloombeat=...` 自包含链接。自包含链接不携带上传音频和 data URL 图片，跨设备上传资源仍依赖后续 Supabase。
+- 制作者可在最终预览页单独开关祝福弹幕；该状态写入草稿和分享 hash。
+- 当前仍不跳阶段：这些改动都属于阶段 7 数据流 / 制作体验收口，不代表阶段 2 Supabase 已完成。
+
+### 已完成部分
+
+- 选歌页：
+  - 本地音频上传限制调整为 10MB。
+  - 系统 BGM / 上传音频 / 推荐 / 链接解析保持互斥选择。
+- 内容页：
+  - 称呼输入框允许完全清空，预览默认回落 TA。
+  - 背景图片上传限制调整为 8MB。
+  - 背景图支持压缩、位置和缩放；不上传时使用主题默认背景。
+  - 主题色会同步影响 range 控件强调色。
+  - 祝福颜色更新同时写 localStorage 与 IndexedDB，避免预览页读到旧草稿。
+- 预览页：
+  - 底部主流程为 `返回编辑 + 完成并分享`。
+  - 右下角操作改为祝福弹幕开关。
+  - 分享弹层支持编辑礼物名称、生成链接、复制链接和系统分享。
+  - 复制成功时按钮进入绿色 `copy-done` 成功态并显示 `已复制`。
+- 礼物页 / GiftExperience：
+  - 弹幕层读取 `blessingMarqueeEnabled`。
+  - 音乐按钮改为音量入口；弹出竖向音量滑杆。
+  - 音量为 0 或未播放时显示静音喇叭图标。
+  - `giftCodec` 对缺失字段使用 `defaultGift` 兜底，避免旧 hash 撑坏动效参数。
+
+### 重要文件修改记录
+
+- `src/app/create/song/page.tsx`：音频上传大小和提示文案。
+- `src/app/create/content/page.tsx`：称呼清空、背景图片 8MB、主题色 CSS 变量、草稿双写、祝福颜色保存。
+- `src/app/create/preview/page.tsx`：最终预览发布页、弹幕开关、分享命名、云端优先 / 自包含兜底链接、复制反馈。
+- `src/app/gift/[id]/page.tsx`：分享 hash / demo / 云端礼物读取与音频缺失提示。
+- `src/components/GiftExperience.tsx`：弹幕显示开关、摄像头调参面板、音量组件接入、礼物舞台渲染。
+- `src/components/SynthBgmButton.tsx`：竖向音量面板、手动音量、静音图标。
+- `src/lib/gift.ts`：`GiftDraft.blessingMarqueeEnabled` 和默认值。
+- `src/lib/giftCodec.ts`：分享 hash 编解码字段清洗与默认兜底。
+- `src/lib/localGiftStore.ts`：IndexedDB / 内存 / window cache 草稿兜底。
+- `src/lib/gestureConfig.ts`、`src/components/GestureDebugPanel.tsx`：摄像头手势真机调参能力。
+- `src/app/globals.css`：分享弹层、复制成功态、竖向音量、主题 range、预览 toast 等样式。
+- `docs/12-gesture-tuning.md`：真机手势调参说明。
+- `docs/13-stage-7-dataflow-fixes.md`：阶段 7 数据流修复背景与方案。
+- `dev-logs/2026-06-26.md`：当天完整实现与验收记录。
+
+### 整体架构思路
+
+```txt
+选歌页
+  -> GiftDraft 保存最终音乐选择
+  -> saveDraft(localStorage) + saveLocalDraft(IndexedDB)
+
+内容页
+  -> 编辑 recipientName / blessing / theme / background / blessingColor
+  -> 轻字段写 localStorage
+  -> 大资源和完整草稿写 IndexedDB + window cache
+
+预览发布页
+  -> getLocalDraft + getDraft 合并，优先保留最新轻字段，同时保留 IndexedDB 大资源
+  -> GiftExperience 即时预览
+  -> 弹幕开关写入 GiftDraft
+  -> 分享弹层编辑 title 并同步礼品卡
+  -> saveCloudGift 成功：生成 /gift/[id]
+  -> saveCloudGift 失败：生成 /gift/share#bloombeat=...
+
+收礼页
+  -> /gift/[id] 云端读取
+  -> /gift/demo 本地草稿读取
+  -> /gift/share hash 解码
+  -> GiftExperience 只读互动
+```
+
+### 待办事项
+
+- 阶段 2：配置 Supabase，验证真实跨设备分享；上传音频和背景图应进入 Storage，分享链接应优先为 `/gift/[id]`。
+- 阶段 3：接真实音乐 API 或扩展系统 BGM 编辑，保持四方式互斥选择。
+- 阶段 4：在 HTTPS / Vercel 环境做真机摄像头调参，将调参面板确认后的默认值固化进 `gestureConfig.ts`。
+- 阶段 5 / 7 回归：继续手机端验收分享复制成功态、系统分享路径、8MB 图片上传和 10MB 音频上传。
+
+### 下次新会话优先读取
+
+```txt
+README.md
+docs/00-project-overview.md
+docs/01-prd.md
+docs/07-development-roadmap.md
+docs/08-acceptance-checklist.md
+docs/10-coding-agent-rules.md
+docs/11-session-handoff.md
+docs/12-gesture-tuning.md
+docs/13-stage-7-dataflow-fixes.md
+dev-logs/2026-06-26.md
+```

@@ -6,6 +6,8 @@ import { BgmPlayer, BgmPresetId, getBgmPreset, playBgmPreset } from "@/lib/syste
 export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume }: { audioUrl?: string; bgmPresetId?: string; autoStart?: boolean; volume: number }) {
   const [playing, setPlaying] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [manualVolume, setManualVolume] = useState(80);
   const audioRef = useRef<{
     context: AudioContext;
     gain: GainNode;
@@ -14,16 +16,38 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
   } | null>(null);
   const mediaRef = useRef<HTMLAudioElement | null>(null);
   const volumeRef = useRef(volume);
+  const manualVolumeRef = useRef(manualVolume);
+
+  const effectiveVolume = useCallback((baseVolume: number, userVolume: number) => {
+    return Math.max(0, Math.min(100, Math.round((baseVolume * userVolume) / 100)));
+  }, []);
+  const updateManualVolume = useCallback((value: string) => {
+    setManualVolume(Number(value));
+  }, []);
+  const displayedVolume = effectiveVolume(volume, manualVolume);
+  const muted = displayedVolume === 0 || !playing;
 
   useEffect(() => {
     volumeRef.current = volume;
+    const nextVolume = effectiveVolume(volume, manualVolumeRef.current);
     if (audioRef.current) {
-      audioRef.current.gain.gain.setTargetAtTime(volume / 100, audioRef.current.context.currentTime, 0.08);
+      audioRef.current.gain.gain.setTargetAtTime(nextVolume / 100, audioRef.current.context.currentTime, 0.08);
     }
     if (mediaRef.current) {
-      mediaRef.current.volume = volume / 100;
+      mediaRef.current.volume = nextVolume / 100;
     }
-  }, [volume]);
+  }, [effectiveVolume, volume]);
+
+  useEffect(() => {
+    manualVolumeRef.current = manualVolume;
+    const nextVolume = effectiveVolume(volumeRef.current, manualVolume);
+    if (audioRef.current) {
+      audioRef.current.gain.gain.setTargetAtTime(nextVolume / 100, audioRef.current.context.currentTime, 0.08);
+    }
+    if (mediaRef.current) {
+      mediaRef.current.volume = nextVolume / 100;
+    }
+  }, [effectiveVolume, manualVolume]);
 
   const stop = useCallback(() => {
     if (mediaRef.current) {
@@ -71,7 +95,7 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
 
       const media = new Audio(audioUrl);
       media.loop = true;
-      media.volume = volumeRef.current / 100;
+      media.volume = effectiveVolume(volumeRef.current, manualVolumeRef.current) / 100;
       mediaRef.current = media;
       await media.play();
       setBlocked(false);
@@ -93,7 +117,7 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
     await context.resume();
 
     const gain = context.createGain();
-    gain.gain.value = volumeRef.current / 100;
+    gain.gain.value = effectiveVolume(volumeRef.current, manualVolumeRef.current) / 100;
     gain.connect(context.destination);
 
     let bgmPlayer: BgmPlayer | undefined;
@@ -129,7 +153,7 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
 
     setBlocked(false);
     setPlaying(true);
-  }, [audioUrl, bgmPresetId]);
+  }, [audioUrl, bgmPresetId, effectiveVolume]);
 
   useEffect(() => {
     if (!autoStart) {
@@ -144,45 +168,70 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
   }, [autoStart, start, stop]);
 
   return (
-    <button
-      className={`speaker-btn ${playing ? "" : "muted"}`}
-      onClick={(event) => {
-        event.stopPropagation();
-        if (playing) {
-          stop();
-          return;
-        }
-        start().catch(() => setBlocked(true));
-      }}
+    <div
+      className="speaker-control"
       onPointerDown={(event) => event.stopPropagation()}
       onPointerMove={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}
-      type="button"
-      aria-label={playing ? "静音" : "播放音乐"}
-      title={playing ? "静音" : blocked ? "点击播放" : "播放音乐"}
     >
-      {playing ? (
-        <>
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <button
+        className={`speaker-btn ${muted ? "muted" : ""}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          setPanelOpen((open) => !open);
+          if (!playing) {
+            start().catch(() => setBlocked(true));
+          }
+        }}
+        type="button"
+        aria-label="调整音乐音量"
+        title={blocked ? "点击播放并调整音量" : "调整音乐音量"}
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          {muted ? (
+            <>
+              <path d="M4 9v6h4l5 4V5L8 9H4Z" fill="currentColor" />
+              <path d="m16 9 4 4m0-4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </>
+          ) : (
             <path
               d="M4 9v6h4l5 4V5L8 9H4Zm12.5 3a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 16.5 12Zm-2.5-7.93v2.06a6.5 6.5 0 0 1 0 11.74v2.06a8.5 8.5 0 0 0 0-15.86Z"
               fill="currentColor"
             />
-          </svg>
-          音乐
-        </>
-      ) : (
-        <>
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path
-              d="M4 9v6h4l5 4V5L8 9H4Zm15.7 3 2.15-2.15-1.4-1.4L18 10.6l-2.45-2.15-1.4 1.4L16.3 12l-2.15 2.15 1.4 1.4L18 13.4l2.45 2.15 1.4-1.4L19.7 12Z"
-              fill="currentColor"
-            />
-          </svg>
-          静音
-        </>
-      )}
-    </button>
+          )}
+        </svg>
+        音量
+      </button>
+      {panelOpen ? (
+        <div className="volume-popover" onClick={(event) => event.stopPropagation()}>
+          <label>
+            <span>音量 {manualVolume}%</span>
+            <span className="volume-slider-wrap">
+              <input
+                aria-label="音乐音量"
+                className="range volume-range"
+                max={100}
+                min={0}
+                onChange={(event) => updateManualVolume(event.target.value)}
+                onInput={(event) => updateManualVolume(event.currentTarget.value)}
+                type="range"
+                value={manualVolume}
+              />
+            </span>
+          </label>
+          <button
+            className="volume-stop-btn"
+            onClick={(event) => {
+              event.stopPropagation();
+              stop();
+            }}
+            type="button"
+          >
+            暂停音乐
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

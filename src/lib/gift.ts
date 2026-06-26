@@ -20,6 +20,7 @@ export type GiftDraft = {
   blessingSpeed: number;
   blessingDensity: 15 | 30 | 50 | 75;
   blessingLineGap: number;
+  blessingMarqueeEnabled: boolean;
   theme: ThemeKey;
   createdAt?: string;
 };
@@ -167,6 +168,7 @@ export const defaultGift: GiftDraft = {
   blessingSpeed: 1,
   blessingDensity: 50,
   blessingLineGap: 0.9,
+  blessingMarqueeEnabled: true,
   theme: "sakura"
 };
 

@@ -15,6 +15,7 @@ type ParseMusicLinkResult =
   | { ok: false; message: string };
 
 const previewDurationMs = 10000;
+const maxAudioUploadSize = 10 * 1024 * 1024;
 
 function canUseAudioFile(file: File) {
   const normalizedName = file.name.toLowerCase();
@@ -311,8 +312,8 @@ export default function SongPage() {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      setUploadMessage("音频超过 2MB，请压缩或裁剪后重新上传。");
+    if (file.size > maxAudioUploadSize) {
+      setUploadMessage("音频超过 10MB，请压缩或裁剪后重新上传。");
       return;
     }
 
@@ -339,7 +340,7 @@ export default function SongPage() {
       playUploadedPreview(audioUrl).catch(() => setUploadMessage("音频已保存；浏览器需要点击页面后才能试听。"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "未知错误";
-      setUploadMessage(`音频读取失败（${msg}），请重新选择一个 2MB 以内的常见音频格式。`);
+      setUploadMessage(`音频读取失败（${msg}），请重新选择一个 10MB 以内的常见音频格式。`);
     }
   }
 
@@ -450,7 +451,7 @@ export default function SongPage() {
               />
               <span>{uploadFileName || "点击上传本地音乐文件"}</span>
             </label>
-            <p className="hint">支持 mp3 / wav / m4a，文件大小不超过 2MB。</p>
+            <p className="hint">支持 mp3 / wav / m4a，文件大小不超过 10MB。</p>
             {uploadMessage ? <p className="hint">{uploadMessage}</p> : null}
             {uploadedAudio ? (
               <div className="music-result">

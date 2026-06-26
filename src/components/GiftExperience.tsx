@@ -4,6 +4,8 @@ import { PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Category, HandLandmarker, NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { GiftDraft, GestureState, themes } from "@/lib/gift";
+import { GestureDebugPanel, useGestureConfigState } from "./GestureDebugPanel";
+import { createDebugBuffer, DebugSample } from "@/lib/gestureConfig";
 import { GiftBackground } from "./GiftBackground";
 import { SynthBgmButton } from "./SynthBgmButton";
 
@@ -89,23 +91,23 @@ function fingerSpreadScore(landmarks: NormalizedLandmark[], palmCenter: { x: num
   return averageDistance / palmWidth;
 }
 
-function palmRollWind(landmarks: NormalizedLandmark[]) {
+function palmRollWind(landmarks: NormalizedLandmark[], rollGain: number) {
   const indexBase = landmarks[5];
   const pinkyBase = landmarks[17];
   const roll = (pinkyBase.y - indexBase.y) / Math.max(0.001, distanceBetween(indexBase, pinkyBase));
-  return clamp(50 + roll * 74, 0, 100);
+  return clamp(50 + roll * rollGain, 0, 100);
 }
 
-function normalizeRollWind(landmarks: NormalizedLandmark[], handedness?: string) {
-  const rollWind = palmRollWind(landmarks);
+function normalizeRollWind(landmarks: NormalizedLandmark[], handedness: string | undefined, rollGain: number) {
+  const rollWind = palmRollWind(landmarks, rollGain);
   return handedness === "Left" ? 100 - rollWind : rollWind;
 }
 
-function palmHeightScore(palmY: number) {
-  return clamp(((0.78 - palmY) / 0.54) * 100, 0, 100);
+function palmHeightScore(palmY: number, topY: number, range: number) {
+  return clamp(((topY - palmY) / range) * 100, 0, 100);
 }
 
-function fingertipSwingScore(landmarks: NormalizedLandmark[], palmCenter: { x: number; y: number }) {
+function fingertipSwingScore(landmarks: NormalizedLandmark[], palmCenter: { x: number; y: number }, swingGain: number) {
   const palmWidth = Math.max(0.001, distanceBetween(landmarks[5], landmarks[17]));
   const fingertipCenter = averagePoint([
     { ...landmarks[8], x: 1 - landmarks[8].x },
@@ -113,7 +115,7 @@ function fingertipSwingScore(landmarks: NormalizedLandmark[], palmCenter: { x: n
     { ...landmarks[16], x: 1 - landmarks[16].x },
     { ...landmarks[20], x: 1 - landmarks[20].x }
   ]);
-  return clamp(50 + ((fingertipCenter.x - palmCenter.x) / palmWidth) * 52, 0, 100);
+  return clamp(50 + ((fingertipCenter.x - palmCenter.x) / palmWidth) * swingGain, 0, 100);
 }
 
 type TrackedHand = {
@@ -300,7 +302,12 @@ function drawHandsOverlay(
 }
 
 export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode; gift: GiftDraft }) {
-  const [showGuide, setShowGuide] = useState(true);
+  const { config, update: updateConfig } = useGestureConfigState();
+  // 关键修复：showGuide 默认 false，让用户能直接看到礼物/互动区域。
+  // 之前的默认值 true 会让 guide-overlay（z-index:20 + backdrop-filter:blur）
+  // 在用户刚进礼物页时直接盖住整个屏幕，导致用户以为"没进礼物页"。
+  // 现在用户可以主动点击 ? 按钮或 ?/启动摄像头 浮层再呼出引导。
+  const [showGuide, setShowGuide] = useState(false);
   const [cameraMessage, setCameraMessage] = useState("");
   const [guideMode, setGuideMode] = useState<GestureState["mode"]>("touch");
   const [cameraStarting, setCameraStarting] = useState(false);
@@ -313,6 +320,15 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     permission: "unknown",
     lastErrorName: ""
   });
+  const [debugSamples, setDebugSamples] = useState<DebugSample[]>([]);
+  const [debugHint, setDebugHint] = useState("等待摄像头开启...");
+  const [firstFrameLatency, setFirstFrameLatency] = useState<number | null>(null);
+  const [lastErrorStack, setLastErrorStack] = useState<string>("");
+  const debugBufferRef = useRef(createDebugBuffer());
+  const fpsCountRef = useRef<{ lastTime: number; frames: number }>({ lastTime: 0, frames: 0 });
+  const fpsValueRef = useRef(0);
+  const firstFrameTimeRef = useRef<number | null>(null);
+  const cameraStreamStartedAtRef = useRef<number | null>(null);
   const [gesture, setGesture] = useState<GestureState>({
     mode: "touch",
     type: "none",
@@ -521,7 +537,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     return landmarker;
   }
 
-  function getCameraHandSignal(item: TrackedHand) {
+  function getCameraHandSignal(item: TrackedHand, cfg: typeof config) {
     const landmarks = item.hand;
     const rawPalm = averagePoint([landmarks[0], landmarks[5], landmarks[9], landmarks[13], landmarks[17]]);
     const palm = { x: 1 - rawPalm.x, y: rawPalm.y };
@@ -535,18 +551,18 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       };
     }
     const heightOrigin = cameraHeightOriginRef.current;
-    const baseHeight = heightOrigin.height + (heightOrigin.y - palm.y) * 185;
-    const height = clamp(baseHeight + verticalVelocity * 170, 0, 100);
+    const baseHeight = heightOrigin.height + (heightOrigin.y - palm.y) * cfg.heightDisplacementGain;
+    const height = clamp(baseHeight + verticalVelocity * cfg.heightVelocityGain, 0, 100);
     const edgeFactor = Math.abs(height - 50) / 50;
-    const movementWind = clamp(50 + horizontalVelocity * 760 + (palm.x - 0.5) * 12, 0, 100);
-    const rollWind = normalizeRollWind(landmarks, item.handedness);
-    const swingWind = fingertipSwingScore(landmarks, palm);
+    const movementWind = clamp(50 + horizontalVelocity * cfg.horizontalVelocityGain + (palm.x - 0.5) * cfg.horizontalOffsetGain, 0, 100);
+    const rollWind = normalizeRollWind(landmarks, item.handedness, cfg.palmRollGain);
+    const swingWind = fingertipSwingScore(landmarks, palm, cfg.fingertipSwingGain);
     const movementWeight = 0.36 - edgeFactor * 0.1;
-    const rollWeight = 0.3 + edgeFactor * 0.05;
-    const swingWeight = 0.34 + edgeFactor * 0.08;
+    const rollWeight = 0.3 + edgeFactor * cfg.edgeRollWeightBoost;
+    const swingWeight = 0.34 + edgeFactor * cfg.edgeSwingWeightBoost;
     const weightTotal = movementWeight + rollWeight + swingWeight;
     const blendedWind = (movementWind * movementWeight + rollWind * rollWeight + swingWind * swingWeight) / weightTotal;
-    const wind = Math.round(clamp(50 + (blendedWind - 50) * (1 + edgeFactor * 0.16), 0, 100));
+    const wind = Math.round(clamp(50 + (blendedWind - 50) * (1 + edgeFactor * cfg.edgeWindAmplify), 0, 100));
     const spreadScore = fingerSpreadScore(landmarks, rawPalm);
     const pinchDistance = distanceBetween(landmarks[4], landmarks[8]);
     const palmWidth = Math.max(0.001, distanceBetween(landmarks[5], landmarks[17]));
@@ -560,28 +576,29 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       horizontalVelocity,
       verticalVelocity,
       strength: Math.abs(wind - 50) + Math.abs(horizontalVelocity * 900),
-      openCandidate: spreadScore > 1.28,
+      openCandidate: spreadScore > cfg.openSpreadThreshold,
+      openSpread: spreadScore,
       pinchRatio: pinchDistance / palmWidth
     };
   }
 
-  function applyCameraLandmarks(primaryHand: TrackedHand, secondaryHand: TrackedHand | null) {
-    const primarySignal = getCameraHandSignal(primaryHand);
-    const secondarySignal = secondaryHand ? getCameraHandSignal(secondaryHand) : null;
+  function applyCameraLandmarks(primaryHand: TrackedHand, secondaryHand: TrackedHand | null, cfg: typeof config) {
+    const primarySignal = getCameraHandSignal(primaryHand, cfg);
+    const secondarySignal = secondaryHand ? getCameraHandSignal(secondaryHand, cfg) : null;
     const directionsMatch =
       !secondarySignal ||
       primarySignal.strength < 12 ||
       secondarySignal.strength < 12 ||
       Math.sign(primarySignal.wind - 50) === Math.sign(secondarySignal.wind - 50) ||
-      Math.abs(primarySignal.wind - secondarySignal.wind) < 24;
-    const heightMatches = !secondarySignal || Math.abs(primarySignal.height - secondarySignal.height) < 34;
+      Math.abs(primarySignal.wind - secondarySignal.wind) < cfg.twoHandDirectionTolerance;
+    const heightMatches = !secondarySignal || Math.abs(primarySignal.height - secondarySignal.height) < cfg.twoHandHeightTolerance;
     const fuseCandidate = Boolean(secondarySignal && directionsMatch && heightMatches);
     const fusionMode = fusionModeRef.current;
     if ((fuseCandidate && fusionMode.mode === "fuse") || (!fuseCandidate && fusionMode.mode === "primary")) {
       fusionMode.streak = 0;
     } else {
       fusionMode.streak += 1;
-      if (fusionMode.streak >= 2) {
+      if (fusionMode.streak >= cfg.fusionStreakFrames) {
         fusionMode.mode = fuseCandidate ? "fuse" : "primary";
         fusionMode.streak = 0;
       }
@@ -604,8 +621,8 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
 
     const palm = smoothedPalmRef.current
       ? {
-          x: smoothedPalmRef.current.x * 0.38 + controlSignal.palm.x * 0.62,
-          y: smoothedPalmRef.current.y * 0.38 + controlSignal.palm.y * 0.62
+          x: smoothedPalmRef.current.x * cfg.palmSmoothKeep + controlSignal.palm.x * (1 - cfg.palmSmoothKeep),
+          y: smoothedPalmRef.current.y * cfg.palmSmoothKeep + controlSignal.palm.y * (1 - cfg.palmSmoothKeep)
         }
       : controlSignal.palm;
     smoothedPalmRef.current = palm;
@@ -621,8 +638,8 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     let nextHeight = Math.round(controlSignal.height);
     let nextWind = controlSignal.wind;
     if (previousControl.time > 0) {
-      nextHeight = Math.round(clamp(nextHeight, previousControl.height - 22, previousControl.height + 22));
-      nextWind = Math.round(clamp(nextWind, previousControl.wind - 24, previousControl.wind + 24));
+      nextHeight = Math.round(clamp(nextHeight, previousControl.height - cfg.heightMaxStep, previousControl.height + cfg.heightMaxStep));
+      nextWind = Math.round(clamp(nextWind, previousControl.wind - cfg.windMaxStep, previousControl.wind + cfg.windMaxStep));
     }
     const openCandidate = controlSignal.openCandidate;
     const pinchRatio = controlSignal.pinchRatio;
@@ -643,14 +660,14 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     drawHandsOverlay(previewCanvasRef.current, primaryHand.hand, trailRef.current, secondaryHand?.hand ?? null, secondaryTrailRef.current);
     drawHandsOverlay(guideCanvasRef.current, primaryHand.hand, trailRef.current, secondaryHand?.hand ?? null, secondaryTrailRef.current);
 
-    const pinchCandidate = pinchRatio < 0.42;
+    const pinchCandidate = pinchRatio < cfg.pinchTriggerRatio;
     const pinchReleased =
-      primarySignal.pinchRatio > 0.58 && (!secondarySignal || secondarySignal.pinchRatio > 0.58);
+      primarySignal.pinchRatio > cfg.pinchReleaseRatio && (!secondarySignal || secondarySignal.pinchRatio > cfg.pinchReleaseRatio);
     let colorTriggered = false;
     if (pinchReleased) {
       pinchActiveRef.current = false;
     }
-    if (pinchCandidate && !pinchActiveRef.current && now - lastColorGestureRef.current > 580) {
+    if (pinchCandidate && !pinchActiveRef.current && now - lastColorGestureRef.current > cfg.pinchCooldownMs) {
       pinchActiveRef.current = true;
       lastColorGestureRef.current = now;
       changeFlowerColor();
@@ -664,13 +681,13 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
 
     if (!openCandidateRef.current || openCandidateRef.current.value !== openCandidate) {
       openCandidateRef.current = { value: openCandidate, since: now };
-    } else if (now - openCandidateRef.current.since > 200) {
+    } else if (now - openCandidateRef.current.since > cfg.openDebounceMs) {
       nextOpen = openCandidate;
     }
-    const openTransitionActive = openCandidateRef.current ? now - openCandidateRef.current.since < 180 : false;
+    const openTransitionActive = openCandidateRef.current ? now - openCandidateRef.current.since < cfg.openDebounceMs - 20 : false;
     if (openTransitionActive && previousControl.time > 0) {
-      nextHeight = Math.round(previousControl.height * 0.7 + nextHeight * 0.3);
-      nextWind = Math.round(previousControl.wind * 0.7 + nextWind * 0.3);
+      nextHeight = Math.round(previousControl.height * cfg.openTransitionKeep + nextHeight * (1 - cfg.openTransitionKeep));
+      nextWind = Math.round(previousControl.wind * cfg.openTransitionKeep + nextWind * (1 - cfg.openTransitionKeep));
     }
 
     const nextType: GestureState["type"] =
@@ -680,15 +697,49 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         ? nextOpen
           ? "open_hand"
           : "fist"
-        : movedY > movedX * 0.78 && (movedY > 0.009 || Math.abs(nextHeight - previousControl.height) > 8)
+        : movedY > movedX * cfg.moveYRatio && (movedY > cfg.movePixelThreshold || Math.abs(nextHeight - previousControl.height) > cfg.moveHeightDeltaThreshold)
           ? "vertical_wave"
-          : movedX > 0.009 || Math.abs(nextWind - 50) > 9
+          : movedX > cfg.movePixelThreshold || Math.abs(nextWind - 50) > cfg.moveWindDeltaThreshold
             ? "horizontal_wave"
             : "none";
 
     lastCameraOpenRef.current = nextOpen;
     lastCameraControlRef.current = { height: nextHeight, wind: nextWind, time: now };
     lastHandSeenAtRef.current = now;
+
+    // 真机调参：每帧推入采样（FPS、手数、捏合比、张开分、当前高度/风力、融合模式）。
+    const fpsState = fpsCountRef.current;
+    if (fpsState.lastTime === 0) {
+      fpsState.lastTime = now;
+      fpsState.frames = 1;
+    } else {
+      fpsState.frames += 1;
+      const elapsed = now - fpsState.lastTime;
+      if (elapsed >= 500) {
+        fpsValueRef.current = Math.round((fpsState.frames * 1000) / elapsed);
+        fpsState.lastTime = now;
+        fpsState.frames = 0;
+      }
+    }
+    if (firstFrameTimeRef.current === null) {
+      firstFrameTimeRef.current = now;
+      const latency = Math.max(0, now - (cameraStreamStartedAtRef.current ?? now));
+      setFirstFrameLatency(latency);
+    }
+    debugBufferRef.current.push({
+      time: now,
+      hands: 1 + (secondarySignal ? 1 : 0),
+      fps: fpsValueRef.current,
+      pinchRatio,
+      openSpread: primarySignal.openSpread,
+      height: nextHeight,
+      wind: nextWind,
+      fusion: shouldFuse ? "fuse" : "primary"
+    });
+    const snapshot = debugBufferRef.current.snapshot();
+    setDebugSamples(snapshot.samples);
+    setDebugHint(`已识别 ${snapshot.samples.length} 帧 · ${fpsValueRef.current || "--"} FPS · ${shouldFuse ? "双手融合" : "单手"}`);
+
     updateGesture({
       mode: "camera",
       type: nextType,
@@ -718,10 +769,10 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         const selectedHands = selectHands(result.landmarks, result.handednesses);
         const secondaryLandmarks = selectedHands.secondary[0] ?? null;
         if (selectedHands.primary) {
-          applyCameraLandmarks(selectedHands.primary, secondaryLandmarks);
+          applyCameraLandmarks(selectedHands.primary, secondaryLandmarks, config);
         } else {
           const now = Date.now();
-          if (now - lastHandSeenAtRef.current < 250) {
+          if (now - lastHandSeenAtRef.current < config.lostHandHoldMs) {
             detectionFrameRef.current = window.requestAnimationFrame(detect);
             return;
           }
@@ -804,6 +855,10 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       const stream = await requestCameraStream();
 
       cameraStreamRef.current = stream;
+      cameraStreamStartedAtRef.current = Date.now();
+      firstFrameTimeRef.current = null;
+      setFirstFrameLatency(null);
+      setLastErrorStack("");
       setHasCameraAccess(true);
       updateCameraDiagnostics("");
       updateGesture({ mode: "camera", type: "none" });
@@ -818,11 +873,13 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         setCameraStage("tracking-ready");
         setCameraMessage("手势识别已开启；画面仅在本机实时识别，不保存、不上传。");
         window.setTimeout(startHandDetection, 0);
-      } catch {
+      } catch (error) {
         stopHandDetection();
         cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
         cameraStreamRef.current = null;
-        updateCameraDiagnostics("HandLandmarkerLoadError");
+        const errorName = error instanceof DOMException ? error.name : "HandLandmarkerLoadError";
+        updateCameraDiagnostics(errorName);
+        setLastErrorStack(error instanceof Error ? error.stack ?? error.message : String(error));
         setGuideMode("touch");
         setHandTrackingReady(false);
         setCameraStage("touch-fallback");
@@ -833,7 +890,9 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       stopHandDetection();
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
       cameraStreamRef.current = null;
-      updateCameraDiagnostics(error instanceof DOMException ? error.name : "UnknownCameraError");
+      const errorName = error instanceof DOMException ? error.name : "UnknownCameraError";
+      updateCameraDiagnostics(errorName);
+      setLastErrorStack(error instanceof Error ? error.stack ?? error.message : String(error));
       setGuideMode("touch");
       setHandTrackingReady(false);
       setHasCameraAccess(false);
@@ -1018,6 +1077,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         </button>
       </div>
 
+      {gift.blessingMarqueeEnabled ? (
       <div className="marquee-layer" aria-hidden="true">
         {blessingLines.map((top, index) => (
           <span
@@ -1045,6 +1105,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
           </span>
         ))}
       </div>
+      ) : null}
 
       {Array.from({ length: 16 }).map((_, index) => (
         <i
@@ -1112,8 +1173,16 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         onPointerUp={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
-        <SynthBgmButton audioUrl={gift.audioUrl} autoStart={!showGuide} volume={gesture.volume} />
+        <SynthBgmButton audioUrl={gift.audioUrl} bgmPresetId={gift.bgmPresetId} autoStart={!showGuide} volume={gesture.volume} />
       </div>
+
+      <GestureDebugPanel
+        config={config}
+        diagnosticHint={debugHint}
+        onChange={updateConfig}
+        samples={debugSamples}
+        visible={gesture.mode === "camera"}
+      />
 
       {actionRight ? (
         <div
@@ -1125,6 +1194,22 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         >
           {actionRight}
         </div>
+      ) : null}
+
+      {showGuide && gesture.mode !== "camera" && !hasCameraAccess && !cameraStarting ? (
+        <button
+          className="camera-launch-fab"
+          aria-label="启动摄像头"
+          title="启动摄像头"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            enableCameraGesture();
+          }}
+          type="button"
+        >
+          <CameraLaunchIcon />
+        </button>
       ) : null}
 
       {showGuide ? (
@@ -1158,75 +1243,75 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
                   </span>
                 ) : null}
               </div>
-              {showInitialCameraGuide ? (
-                <button
-                  className="primary-btn guide-camera-btn"
-                  disabled={cameraStarting}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    enableCameraGesture();
-                  }}
-                  type="button"
-                >
-                  {cameraModeButtonText}
-                </button>
-              ) : null}
-              {guideMode === "camera" ? (
-                <div className="guide-grid camera-guide-grid">
-                  <GuideItem icon="↕" title="掌心上移 / 下移" text="花朵长高变矮；越高声音越大，越矮声音越小" />
-                  <GuideItem icon="↔" title="手掌左右摇晃" text="掌心移动、手腕摇晃和指尖横摆都会改变西风 / 东风和音量" />
-                  <GuideItem icon="开" title="张开五指并拢双拳" text="花朵张开闭合" />
-                  <GuideItem icon="捏" title="拇指与食指孔雀形状捏合" text="颜色切换" />
-                </div>
-              ) : null}
-              {guideMode === "touch" && !showInitialCameraGuide ? (
-                <div className="guide-grid">
-                  <GuideItem icon="↕" title="上下滑动" text="越高声音越大，越矮声音越小" />
-                  <GuideItem icon="↔" title="左右滑动" text="越靠左声音越小，越靠右声音越大" />
-                  <GuideItem icon="◌" title="点击花朵" text="开放或闭合" />
-                  <GuideItem icon="✦" title="双击屏幕" text="整片花园统一换色" />
-                </div>
-              ) : null}
-              {guideMode === "camera" ? <p className="hint">双手同向会一起参与识别；双手动作差别较大时优先按右手控制。</p> : null}
-              {cameraMessage ? <p className="hint">{cameraMessage}</p> : null}
-            </section>
+              <div className="camera-diagnostics camera-diagnostics-extra" aria-label="摄像头真机诊断">
+                <span>
+                  设备 <strong>{typeof navigator !== "undefined" && navigator.userAgent ? navigator.userAgent.split(") ")[0].replace("(", "") : "未知"}</strong>
+                </span>
+                <span>
+                  摄像头分辨率 <strong>{typeof window !== "undefined" && videoRef.current?.videoWidth ? `${videoRef.current.videoWidth}×${videoRef.current.videoHeight}` : "未就绪"}</strong>
+                </span>
+                <span>
+                  首帧延迟 <strong>{firstFrameLatency === null ? "测量中" : `${firstFrameLatency}ms`}</strong>
+                </span>
+                <span>
+                  已识别帧数 <strong>{debugSamples.length}</strong>
+                </span>
+                {lastErrorStack ? (
+                  <span className="camera-diagnostics-stack">
+                    错误详情 <strong>{lastErrorStack.split("\n")[0]}</strong>
+                  </span>
+                ) : null}
+              </div>
+            {showInitialCameraGuide ? (
+              <button
+                className="primary-btn guide-camera-btn"
+                disabled={cameraStarting}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  enableCameraGesture();
+                }}
+                type="button"
+              >
+                {cameraModeButtonText}
+              </button>
+            ) : null}
+            {guideMode === "camera" ? (
+              <div className="guide-grid camera-guide-grid">
+                <GuideItem icon="↕" title="掌心上移 / 下移" text="花朵长高变矮；越高声音越大，越矮声音越小" />
+                <GuideItem icon="↔" title="手掌左右摇晃" text="掌心移动、手腕摇晃和指尖横摆都会改变西风 / 东风和音量" />
+                <GuideItem icon="开" title="张开五指并拢双拳" text="花朵张开闭合" />
+                <GuideItem icon="捏" title="拇指与食指孔雀形状捏合" text="颜色切换" />
+              </div>
+            ) : null}
+            {guideMode === "touch" && !showInitialCameraGuide ? (
+              <div className="guide-grid">
+                <GuideItem icon="↕" title="上下滑动" text="越高声音越大，越矮声音越小" />
+                <GuideItem icon="↔" title="左右滑动" text="越靠左声音越小，越靠右声音越大" />
+                <GuideItem icon="◌" title="点击花朵" text="开放或闭合" />
+                <GuideItem icon="✦" title="双击屏幕" text="整片花园统一换色" />
+              </div>
+            ) : null}
+            {guideMode === "camera" ? <p className="hint">双手同向会一起参与识别；双手动作差别较大时优先按右手控制。</p> : null}
+            {cameraMessage ? <p className="hint">{cameraMessage}</p> : null}
+          </section>
 
-            <section className="guide-section fallback-guide">
-              <strong>
-                {guideMode === "camera"
-                  ? "不想使用摄像头时，可以切换为触摸互动。"
-                  : showInitialCameraGuide
-                    ? "如果无法唤起摄像头，你可以按照下列方式触摸屏幕，完成交互。"
-                    : "也可以随时回到摄像头手势识别。"}
-              </strong>
-              {guideMode === "camera" || showInitialCameraGuide ? (
-                <div className="guide-grid">
-                  <GuideItem icon="↕" title="上下滑动" text="越高声音越大，越矮声音越小" />
-                  <GuideItem icon="↔" title="左右滑动" text="越靠左声音越小，越靠右声音越大" />
-                  <GuideItem icon="◌" title="点击花朵" text="开放或闭合" />
-                  <GuideItem icon="✦" title="双击屏幕" text="整片花园统一换色" />
-                </div>
-              ) : null}
-              {!showInitialCameraGuide ? (
-                <button
-                  className="secondary-btn guide-mode-btn"
-                  disabled={cameraStarting}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (gesture.mode === "camera") {
-                      switchToTouchMode();
-                    } else {
-                      enableCameraGesture();
-                    }
-                  }}
-                  type="button"
-                >
-                  {gesture.mode === "camera" ? "切换触摸" : cameraModeButtonText}
-                </button>
-              ) : null}
-            </section>
+          <button
+            className="secondary-btn guide-mode-btn"
+            disabled={cameraStarting}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (gesture.mode === "camera") {
+                switchToTouchMode();
+              } else {
+                enableCameraGesture();
+              }
+            }}
+            type="button"
+          >
+            {gesture.mode === "camera" ? "切换为触摸互动" : "回到摄像头手势"}
+          </button>
             <button
               className="primary-btn"
               onClick={(event) => {
@@ -1254,6 +1339,17 @@ function GuideItem({ icon, title, text }: { icon: string; title: string; text: s
       <strong>{title}</strong>
       <p className="hint">{text}</p>
     </div>
+  );
+}
+
+function CameraLaunchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+      <path
+        d="M9 4.5 7.5 6H4.5A2.5 2.5 0 0 0 2 8.5v9A2.5 2.5 0 0 0 4.5 20h15a2.5 2.5 0 0 0 2.5-2.5v-9A2.5 2.5 0 0 0 19.5 6h-3L15 4.5A1.5 1.5 0 0 0 13.94 4h-3.88A1.5 1.5 0 0 0 9 4.5Zm3 5.5a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0 1.7a2.3 2.3 0 1 0 0 4.6 2.3 2.3 0 0 0 0-4.6Z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }
 

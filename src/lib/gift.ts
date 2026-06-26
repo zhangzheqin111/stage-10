@@ -1,4 +1,5 @@
 export type ThemeKey = "sakura" | "morning" | "cream" | "blue";
+export type WeatherPreset = "sunny" | "rain" | "night" | "snow" | "wind";
 
 export type GiftDraft = {
   id?: string;
@@ -14,6 +15,9 @@ export type GiftDraft = {
   backgroundPositionX: number;
   backgroundPositionY: number;
   backgroundScale: number;
+  backgroundPresetId?: string;
+  weatherPreset?: WeatherPreset;
+  scenePreset?: string;
   blessingText: string;
   blessingColor: string;
   blessingFontSize: number;

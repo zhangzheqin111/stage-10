@@ -162,8 +162,8 @@ stage-6（当前保存点）
 
 ### 阶段 2
 
-- 上传音频，支持 mp3 / wav / m4a，限制 15MB。
-- 上传图片，限制 5MB。
+- 上传音频，支持 mp3 / wav / m4a，限制 10MB。
+- 上传图片，限制 8MB。
 - 上传音频作为 BGM，不叠加系统 BGM。
 - 背景图片位置和比例调整。
 - 祝福字号、速度、占比、行距、颜色设置。
@@ -756,5 +756,14 @@ docs/10-coding-agent-rules.md
 docs/11-session-handoff.md
 docs/12-gesture-tuning.md
 docs/13-stage-7-dataflow-fixes.md
+docs/14-stage-8-cloud-sharing.md
 dev-logs/2026-06-26.md
 ```
+
+# 2026-06-26 Stage 8 Handoff Entry
+
+For the current Stage 8 state, read `docs/15-stage-8-handoff.md` first.
+
+It contains the latest key decisions, completed work, remaining tasks, important files, architecture summary, validation links, and recommended next step after cloud sharing stabilization.
+
+---

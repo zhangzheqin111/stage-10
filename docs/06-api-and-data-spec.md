@@ -20,6 +20,9 @@ type Gift = {
   backgroundPositionX: number;
   backgroundPositionY: number;
   backgroundScale: number;
+  backgroundPresetId?: string;
+  weatherPreset?: "sunny" | "rain" | "night" | "snow" | "wind";
+  scenePreset?: string;
 
   blessingText: string;
   blessingColor: string;
@@ -27,6 +30,7 @@ type Gift = {
   blessingSpeed: number;
   blessingDensity: 15 | 30 | 50 | 75;
   blessingLineGap: number;
+  blessingMarqueeEnabled: boolean;
 
   theme: "sakura" | "morning" | "cream" | "blue";
   createdAt?: string;
@@ -179,7 +183,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 SUPABASE_STORAGE_BUCKET=bloombeat-gifts
 ```
 
-如果缺少 `NEXT_PUBLIC_SUPABASE_URL` 或 `SUPABASE_SERVICE_ROLE_KEY`，云端 API 返回 503，前端自动回退到 IndexedDB 本地分享。
+如果缺少 `NEXT_PUBLIC_SUPABASE_URL` 或 `SUPABASE_SERVICE_ROLE_KEY`，云端 API 返回 503，前端自动回退到 `/gift/share#bloombeat=...` 自包含链接。
 
 ### Supabase Database
 
@@ -204,13 +208,14 @@ create table gifts (
 
 - `POST /api/upload`
   - 入参：`{ dataUrl: string, kind: "image" | "audio" }`
-  - 图片必须为 `image/*`，最大 5MB。
-  - 音频支持 `mp3 / wav / m4a`，最大 15MB。
+  - 图片必须为 `image/*`，最大 8MB。
+  - 音频支持 `mp3 / wav / m4a`，最大 10MB。
   - 成功返回：`{ url, path }`
 - `POST /api/gifts`
   - 入参：`{ gift: Gift }`
   - 成功返回：`{ id, gift }`
   - 数据保存到 Supabase `gifts` 表的 `gift` jsonb 字段。
+  - 同一 `id` 再次保存时使用 upsert，避免重复生成时主键冲突。
 - `GET /api/gifts/[id]`
   - 成功返回：`{ gift }`
   - 未找到返回 404。

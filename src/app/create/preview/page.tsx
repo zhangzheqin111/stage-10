@@ -43,6 +43,11 @@ export default function PreviewPage() {
         const mergedDraft = { ...savedDraft, ...localDraft };
         if (!localDraft.audioUrl && savedDraft.audioUrl) {
           mergedDraft.audioUrl = savedDraft.audioUrl;
+          mergedDraft.songSourceType = "upload";
+          mergedDraft.musicSelected = true;
+          mergedDraft.songTitle = savedDraft.songTitle;
+          mergedDraft.artist = savedDraft.artist;
+          mergedDraft.bgmPresetId = undefined;
         }
         if (!localDraft.backgroundImageUrl && savedDraft.backgroundImageUrl) {
           mergedDraft.backgroundImageUrl = savedDraft.backgroundImageUrl;

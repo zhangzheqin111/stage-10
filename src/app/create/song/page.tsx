@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
 import { GiftDraft, getDraft, saveDraft } from "@/lib/gift";
-import { fileToDataUrl } from "@/lib/localGiftStore";
+import { fileToDataUrl, saveLocalDraft } from "@/lib/localGiftStore";
 import { MockMusicTrack, parseMockMusicLink, searchMockMusic } from "@/lib/mockMusic";
 import { BgmPreset, previewBgmPreset, SYSTEM_BGM_PRESETS } from "@/lib/systemBgm";
 
@@ -89,6 +89,13 @@ export default function SongPage() {
   const mediaPreviewRef = useRef<HTMLAudioElement | null>(null);
   const previewTimerRef = useRef<number | null>(null);
   const bgmPreviewStopRef = useRef<(() => void) | null>(null);
+
+  function persistMusicDraft(nextDraft: GiftDraft) {
+    saveDraft(nextDraft);
+    saveLocalDraft(nextDraft).catch((err) => {
+      console.warn("[song] saveLocalDraft failed", err);
+    });
+  }
 
   useEffect(() => {
     if (shouldStartFromGuide()) {
@@ -216,7 +223,7 @@ export default function SongPage() {
     setUploadMessage(`已选择系统 BGM：${preset.title}（${preset.instrument}）。`);
     // 同步写入 localStorage，立即可读
     try {
-      saveDraft(nextDraft);
+      persistMusicDraft(nextDraft);
       console.log("[song] saveDraft 成功，localStorage 大小：", window.localStorage.getItem("bloombeat-draft")?.length ?? 0);
     } catch (err) {
       console.error("[song] saveDraft 失败", err);
@@ -244,7 +251,7 @@ export default function SongPage() {
     setSelected(audio.title);
     setSelectedArtist("用户上传音频");
     // 同步写入 localStorage（包含 audioUrl data URL）
-    saveDraft(nextDraft);
+    persistMusicDraft(nextDraft);
     setUploadMessage("已重新使用上传音频作为背景音乐。");
     playUploadedPreview(audio.audioUrl).catch(() => setUploadMessage("已使用上传音频，但浏览器需要点击页面后才能试听。"));
   }
@@ -268,7 +275,7 @@ export default function SongPage() {
       setResolvedTrack(track);
     }
     // 同步写入 localStorage
-    saveDraft(nextDraft);
+    persistMusicDraft(nextDraft);
     setUploadMessage(`已选择：${track.title}。`);
     try {
       playMockPreview(track);
@@ -327,14 +334,17 @@ export default function SongPage() {
       setUploadedAudio({ title, audioUrl });
       setSelected(title);
       // 同步写入 localStorage（含 audioUrl），保证预览/礼物页能立刻读到
-      saveDraft({
+      const currentDraft = getDraft();
+      const nextDraft = {
+        ...currentDraft,
         songSourceType: "upload",
         musicSelected: true,
         songTitle: title,
         artist: "用户上传音频",
         audioUrl,
         bgmPresetId: undefined
-      });
+      } as const;
+      persistMusicDraft(nextDraft);
       setSelectedArtist("用户上传音频");
       setUploadMessage("音频已保存到礼物草稿，可进入下一步。");
       playUploadedPreview(audioUrl).catch(() => setUploadMessage("音频已保存；浏览器需要点击页面后才能试听。"));

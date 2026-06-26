@@ -303,11 +303,8 @@ function drawHandsOverlay(
 
 export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode; gift: GiftDraft }) {
   const { config, update: updateConfig } = useGestureConfigState();
-  // 关键修复：showGuide 默认 false，让用户能直接看到礼物/互动区域。
-  // 之前的默认值 true 会让 guide-overlay（z-index:20 + backdrop-filter:blur）
-  // 在用户刚进礼物页时直接盖住整个屏幕，导致用户以为"没进礼物页"。
-  // 现在用户可以主动点击 ? 按钮或 ?/启动摄像头 浮层再呼出引导。
-  const [showGuide, setShowGuide] = useState(false);
+  // First entry shows the gesture guide; users can close it after reading.
+  const [showGuide, setShowGuide] = useState(true);
   const [cameraMessage, setCameraMessage] = useState("");
   const [guideMode, setGuideMode] = useState<GestureState["mode"]>("touch");
   const [cameraStarting, setCameraStarting] = useState(false);

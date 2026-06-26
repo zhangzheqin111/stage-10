@@ -5,6 +5,11 @@ const allowedTypes = {
   audio: new Set(["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/aac"])
 };
 
+const maxUploadBytes = {
+  image: 8 * 1024 * 1024,
+  audio: 10 * 1024 * 1024
+} as const;
+
 function parseDataUrl(dataUrl: string) {
   const [metadata, base64] = dataUrl.split(",");
   const contentType = metadata.match(/^data:(.*?);base64$/)?.[1];
@@ -52,9 +57,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "请上传 mp3 / wav / m4a 格式音频。" }, { status: 400 });
   }
 
-  const maxBytes = body.kind === "image" ? 5 * 1024 * 1024 : 15 * 1024 * 1024;
+  const maxBytes = maxUploadBytes[body.kind];
   if (parsed.bytes.byteLength > maxBytes) {
-    return NextResponse.json({ message: body.kind === "image" ? "图片超过 5MB。" : "音频超过 15MB。" }, { status: 400 });
+    return NextResponse.json({ message: body.kind === "image" ? "图片超过 8MB。" : "音频超过 10MB。" }, { status: 400 });
   }
 
   const path = `${body.kind}/${Date.now().toString(36)}-${crypto.randomUUID()}.${extensionFor(parsed.contentType)}`;

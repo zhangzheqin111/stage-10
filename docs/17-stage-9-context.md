@@ -61,6 +61,7 @@ Reason: GitHub repository URLs cannot contain a literal space in the path, so `s
 - Deploy to HTTPS or create a stable HTTPS tunnel.
 - Validate camera permission and MediaPipe hand recognition only under HTTPS.
 - Decide whether the gesture debug panel should remain available, be gated, or be removed from recipient-facing builds.
+- Use `docs/18-stage-9-https-deployment-runbook.md` for the HTTPS deployment and camera-validation sequence.
 
 ## Development Rules Added From Recent Failures
 

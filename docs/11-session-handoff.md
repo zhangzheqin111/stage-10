@@ -7,7 +7,7 @@ This file is the clean entry point for the next Codex session. Prefer this docum
 ## Current Position
 
 - Project: BloomBeat, an interactive music gift H5.
-- Local path: `C:\Users\张喆勤\BloomBeat`
+- Local path: `C:\Users\<current-user>\BloomBeat`
 - Current branch: `stage-8`
 - Current GitHub origin: `https://github.com/zhangzheqin111/BLOOMBEAT.git`
 - Current runtime validation server: `http://127.0.0.1:3001`

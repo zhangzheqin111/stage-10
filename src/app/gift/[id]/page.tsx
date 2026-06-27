@@ -145,7 +145,7 @@ export default function GiftPage() {
       setShareMessage("新的转发链接已生成，可以复制或分享至系统应用。");
     } catch (err) {
       console.error("[gift] saveForwardLink failed", err);
-      setShareMessage("名字已在当前页面更新，但新转发链接保存失败。请稍后再试。");
+      setShareMessage("名字已在当前页面更新，但新的转发链接保存失败。请稍后再试。");
     } finally {
       setShareSaving(false);
     }
@@ -248,7 +248,7 @@ export default function GiftPage() {
           gift={gift}
         />
         {shareOpen ? (
-          <div className="share-popover" onPointerDown={(e) => e.stopPropagation()}>
+          <div className="share-popover" onPointerDown={(event) => event.stopPropagation()}>
             <button className="share-close" onClick={() => setShareOpen(false)} type="button" aria-label="关闭">
               ×
             </button>

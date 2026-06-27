@@ -123,7 +123,6 @@ export default function SongPage() {
       return;
     }
 
-    // Read the visible draft synchronously so mobile pages show the current selection immediately.
     const visibleDraft = getDraft();
     if (visibleDraft.musicSelected) {
       setSelected(visibleDraft.songTitle);
@@ -198,7 +197,6 @@ export default function SongPage() {
     previewTimerRef.current = window.setTimeout(stopPreview, previewDurationMs);
   }
 
-  // Preview the selected system BGM preset.
   function playBgmPreview(preset: BgmPreset) {
     stopPreview();
     bgmPreviewStopRef.current = previewBgmPreset(preset, previewDurationMs);
@@ -223,7 +221,6 @@ export default function SongPage() {
   }
 
   async function chooseBgm(preset: BgmPreset) {
-    console.log("[song] chooseBgm", preset.title);
     const currentDraft = getDraft();
     const nextDraft = {
       ...currentDraft,
@@ -238,12 +235,7 @@ export default function SongPage() {
     setSelected(preset.title);
     setSelectedArtist("BloomBeat 系统 BGM");
     setUploadMessage(`已选择系统 BGM：${preset.title}（${preset.instrument}）。`);
-    try {
-      persistMusicDraft(nextDraft);
-      console.log("[song] saveDraft success, localStorage size", window.localStorage.getItem("bloombeat-draft")?.length ?? 0);
-    } catch (err) {
-      console.error("[song] saveDraft failed", err);
-    }
+    persistMusicDraft(nextDraft);
     try {
       playBgmPreview(preset);
     } catch {
@@ -278,14 +270,14 @@ export default function SongPage() {
       songSourceType: sourceType,
       musicSelected: true,
       songTitle: track.title,
-      artist: `${track.artist} 路 ${track.platform}`,
+      artist: `${track.artist} · ${track.platform}`,
       audioUrl: undefined,
       bgmPresetId: undefined
     } as const;
 
     startCreationFlow();
     setSelected(track.title);
-    setSelectedArtist(`${track.artist} 路 ${track.platform}`);
+    setSelectedArtist(`${track.artist} · ${track.platform}`);
     if (sourceType === "link") {
       setResolvedTrack(track);
     }
@@ -454,7 +446,7 @@ export default function SongPage() {
                 <div>
                   <strong>{resolvedTrack.title}</strong>
                   <p className="hint">
-                    {resolvedTrack.artist} 路 {resolvedTrack.platform}
+                    {resolvedTrack.artist} · {resolvedTrack.platform}
                   </p>
                   <button className="secondary-btn compact-btn use-track-btn" onClick={() => chooseMockTrack(resolvedTrack, "link")} type="button">
                     使用这首歌
@@ -487,7 +479,7 @@ export default function SongPage() {
                       <span>
                         <strong>{track.title}</strong>
                         <p className="hint">
-                          {track.artist} 路 {track.platform} 路 {track.mood}
+                          {track.artist} · {track.platform} · {track.mood}
                         </p>
                       </span>
                     </button>

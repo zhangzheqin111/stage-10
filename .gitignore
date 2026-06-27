@@ -30,9 +30,13 @@ Thumbs.db
 dev-logs/dev-server.*.log
 dev-server.log
 dev-server.err.log
+dev-server.out.log
+tunnel.log
+tunnel.err.log
 dev-logs/tunnel.log
 cloudflared.exe
 cloudflared*.log
 prod-server*.log
+prod3001*.log
 .workbuddy/
 .data/

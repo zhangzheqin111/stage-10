@@ -63,6 +63,8 @@ export default function PreviewPage() {
   const [shareTitle, setShareTitle] = useState("");
   const [marqueeMessage, setMarqueeMessage] = useState("");
   const [guideOpen, setGuideOpen] = useState(true);
+  const [preparationError, setPreparationError] = useState("");
+  const [preparationRetryKey, setPreparationRetryKey] = useState(0);
   const preparingResourcesRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -106,8 +108,11 @@ export default function PreviewPage() {
       return;
     }
 
+    let cancelled = false;
+
     if (audioDataUrl && !preparingResourcesRef.current.has(audioDataUrl)) {
       preparingResourcesRef.current.add(audioDataUrl);
+      setPreparationError("");
       prepareCloudResourceOnce(audioDataUrl, "audio")
         .then((url) => {
           if (cancelled) return;
@@ -125,11 +130,15 @@ export default function PreviewPage() {
         })
         .catch(() => {
           preparingResourcesRef.current.delete(audioDataUrl);
+          if (!cancelled) {
+            setPreparationError("音乐准备失败。请检查网络后点击重试，或返回换一段更短的音频。");
+          }
         });
     }
 
     if (imageDataUrl && !preparingResourcesRef.current.has(imageDataUrl)) {
       preparingResourcesRef.current.add(imageDataUrl);
+      setPreparationError("");
       prepareCloudResourceOnce(imageDataUrl, "image")
         .then((url) => {
           if (cancelled) return;
@@ -147,15 +156,16 @@ export default function PreviewPage() {
         })
         .catch(() => {
           preparingResourcesRef.current.delete(imageDataUrl);
+          if (!cancelled) {
+            setPreparationError("图片准备失败。请检查网络后点击重试，或返回重新选择图片。");
+          }
         });
     }
-
-    let cancelled = false;
 
     return () => {
       cancelled = true;
     };
-  }, [draft]);
+  }, [draft, preparationRetryKey]);
 
   if (!draft) {
     return (
@@ -182,9 +192,22 @@ export default function PreviewPage() {
     setShareUrl("");
     setShareTitle(defaultTitle);
     const preparation = getPreparationStatus(nextDraft);
-    setShareMessage(preparation.allReady ? "默认名称来自编辑页昵称，也可以在这里修改。" : "音乐或图片还在准备，完成后即可生成可转发链接。");
+    setShareMessage(
+      preparationError
+        ? preparationError
+        : preparation.allReady
+          ? "默认名称来自编辑页昵称，也可以在这里修改。"
+          : "音乐或图片还在准备，完成后即可生成可转发链接。"
+    );
     setShareCopied(false);
     setShareOpen(true);
+  }
+
+  function retryMediaPreparation() {
+    preparingResourcesRef.current.clear();
+    setPreparationError("");
+    setShareMessage("正在重新准备音乐或图片...");
+    setPreparationRetryKey((key) => key + 1);
   }
 
   function updateShareTitle(value: string) {
@@ -348,6 +371,11 @@ export default function PreviewPage() {
               <span>{preparation.musicPreparing ? "音乐准备中" : "音乐已准备好"}</span>
               <span>{preparation.imagePreparing ? "图片准备中" : "图片已准备好"}</span>
             </div>
+            {preparationError ? (
+              <button className="secondary-btn compact-btn" onClick={retryMediaPreparation} type="button">
+                重试准备音乐/图片
+              </button>
+            ) : null}
             <button className="primary-btn share-generate-btn" disabled={shareGenerating} onClick={generateShareLink} type="button">
               {shareGenerating ? "生成中..." : shareUrl ? "重新生成链接" : preparation.allReady ? "生成分享链接" : "准备中，稍后生成"}
             </button>

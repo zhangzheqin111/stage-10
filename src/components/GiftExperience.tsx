@@ -333,7 +333,7 @@ type GiftExperienceProps = {
 export function GiftExperience({
   actionRight,
   gift,
-  guideCompleteLabel = "鏌ョ湅绀肩墿鐢熸垚",
+  guideCompleteLabel = "查看礼物生成",
   onGuideOpenChange
 }: GiftExperienceProps) {
   const { config } = useGestureConfigState();
@@ -354,7 +354,7 @@ export function GiftExperience({
     lastErrorName: ""
   });
   const [debugSamples, setDebugSamples] = useState<DebugSample[]>([]);
-  const [debugHint, setDebugHint] = useState("绛夊緟鎽勫儚澶村紑鍚?..");
+  const [debugHint, setDebugHint] = useState("等待摄像头开启...");
   const [firstFrameLatency, setFirstFrameLatency] = useState<number | null>(null);
   const [lastErrorStack, setLastErrorStack] = useState<string>("");
   const debugBufferRef = useRef(createDebugBuffer());
@@ -401,7 +401,7 @@ export function GiftExperience({
 
   const theme = themes[gift.theme];
   const windOffset = gesture.windPower - 50;
-  const windDisplay = Math.abs(windOffset) < 8 ? "寰 0" : `${windOffset > 0 ? "涓滈" : "瑗块"} +${Math.abs(windOffset)}`;
+  const windDisplay = Math.abs(windOffset) < 8 ? "微风 0" : `${windOffset > 0 ? "东风" : "西风"} +${Math.abs(windOffset)}`;
   const blessingLines = useMemo(() => {
     const density = gift.blessingDensity ?? 50;
     const lineCount = density === 15 ? 2 : density === 30 ? 3 : density === 50 ? 5 : 7;

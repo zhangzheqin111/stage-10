@@ -3,7 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BgmPlayer, BgmPresetId, getBgmPreset, playBgmPreset } from "@/lib/systemBgm";
 
-export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume }: { audioUrl?: string; bgmPresetId?: string; autoStart?: boolean; volume: number }) {
+export function SynthBgmButton({
+  audioUrl,
+  bgmPresetId,
+  autoStart = true,
+  volume
+}: {
+  audioUrl?: string;
+  bgmPresetId?: string;
+  autoStart?: boolean;
+  volume: number;
+}) {
   const [playing, setPlaying] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -22,9 +32,11 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
   const effectiveVolume = useCallback((baseVolume: number, userVolume: number) => {
     return Math.max(0, Math.min(100, Math.round((baseVolume * userVolume) / 100)));
   }, []);
+
   const updateManualVolume = useCallback((value: string) => {
     setManualVolume(Number(value));
   }, []);
+
   const displayedVolume = effectiveVolume(volume, manualVolume);
   const muted = !bgmEnabled || displayedVolume === 0 || !playing;
   const buttonLabel = !bgmEnabled ? "无 BGM" : playing ? "音乐播放中" : "播放音乐";
@@ -138,6 +150,7 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
       setPlaying(false);
       return;
     }
+
     const context = new AudioContextClass();
     await context.resume();
 
@@ -147,7 +160,6 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
 
     let bgmPlayer: BgmPlayer | undefined;
 
-    // 尝试加载预设 BGM
     if (bgmPresetId) {
       const preset = getBgmPreset(bgmPresetId as BgmPresetId);
       if (preset) {
@@ -155,7 +167,6 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
       }
     }
 
-    // 兜底：如果没预设，播放默认四音和弦
     if (!bgmPlayer) {
       const notes = [261.63, 329.63, 392, 523.25];
       const oscillators = notes.map((note, index) => {
@@ -172,7 +183,6 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
 
       audioRef.current = { context, gain, oscillators };
     } else {
-      // 预设模式下仍需创建振荡器数组以避免 stop 时出错
       audioRef.current = { context, gain, oscillators: [], bgmPlayer };
     }
 

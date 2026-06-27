@@ -767,3 +767,22 @@ For the current Stage 8 state, read `docs/15-stage-8-handoff.md` first.
 It contains the latest key decisions, completed work, remaining tasks, important files, architecture summary, validation links, and recommended next step after cloud sharing stabilization.
 
 ---
+
+# 2026-06-27 Stage 8 Clean Context Entry
+
+Important: some older context documents already contain mojibake from previous sessions. Do not treat the garbled historical text as the current Stage 8 source of truth.
+
+For the next Stage 8 continuation, read `docs/16-stage-8-context-and-debugging.md` first. It is the clean context source for:
+
+- key decisions,
+- completed modules,
+- pending work,
+- important modified files,
+- current architecture,
+- repeated issue causes and development rules,
+- acceptance checklist,
+- next recommended module.
+
+This rule is intended to prevent repeated regressions around slow link generation, uploaded music/image loss, interaction entry failures, slow share generation, camera readiness, and frontend Chinese mojibake.
+
+---

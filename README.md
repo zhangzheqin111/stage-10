@@ -11,6 +11,7 @@ BloomBeat（花律）是一个治愈系 2D 互动音乐礼物 H5。用户选择 
 3. `docs/07-development-roadmap.md`
 4. `docs/08-acceptance-checklist.md`
 5. `docs/10-coding-agent-rules.md`
+6. `docs/16-stage-8-context-and-debugging.md` (Stage 8 clean context source)
 
 ## 核心原则
 

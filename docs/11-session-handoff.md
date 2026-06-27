@@ -1,17 +1,21 @@
 # BloomBeat Session Handoff
 
-Updated: 2026-06-27
+Updated: 2026-06-28
 
-This file is the clean entry point for the next Codex session. Prefer this document, `docs/16-stage-8-context-and-debugging.md`, and `docs/17-stage-9-context.md` over older mojibake sections in historical docs.
+This file is the clean entry point for the next Codex session. Prefer this document and `docs/19-stage-10-context.md` over older mojibake sections in historical docs.
 
 ## Current Position
 
 - Project: BloomBeat, an interactive music gift H5.
 - Local path: `C:\Users\<current-user>\BloomBeat`
-- Current branch: `stage-8`
+- Current branch before Stage 10 snapshot: `stage-8`
 - Current GitHub origin: `https://github.com/zhangzheqin111/BLOOMBEAT.git`
 - Current runtime validation server: `http://127.0.0.1:3001`
 - LAN validation base: `http://192.168.2.9:3001`
+- Latest HTTPS validation tunnel: `https://robot-remind-fig-render.trycloudflare.com`
+- Stage 10 snapshot repository target: `https://github.com/zhangzheqin111/stage-10`
+- Local Stage 10 snapshot commit: latest commit on branch `stage-10`
+- Push status: pending because the local environment could not connect to `github.com:443` during the push attempt.
 
 ## Product Decisions
 
@@ -40,6 +44,17 @@ This file is the clean entry point for the next Codex session. Prefer this docum
 - Visible UI mojibake in the key gift, preview, song, and BGM controls has been repaired.
 - Camera on mobile over LAN HTTP is known to fail by browser security policy; leave it for HTTPS.
 
+### Stage 9
+
+- Repeatable smoke validation added with `npm.cmd run validate:stage9`.
+- HTTPS quick-tunnel validation is working.
+- Preview/mobile layout was tuned for bottom actions, garden placement, camera panel pressure, and guide-button placement.
+- Gesture open/close no longer updates while the hand is visibly moving for height/wind control.
+- Uploaded audio no longer blocks first link generation; pending audio sync writes back to the same gift ID.
+- Supabase Storage is the default durable media upload path.
+- Local server media is explicit validation/fallback only.
+- Gesture debug UI is hidden by default and gated behind development/debug flags.
+
 ## Important Modified Files
 
 - `.gitignore`
@@ -62,6 +77,8 @@ This file is the clean entry point for the next Codex session. Prefer this docum
   - Source of truth for Stage 8 context and debugging notes.
 - `docs/17-stage-9-context.md`
   - Current clean Stage 9 planning and handoff context.
+- `docs/19-stage-10-context.md`
+  - Current clean Stage 10 snapshot context, decisions, architecture, recurrent errors, and next TODOs.
 
 ## Architecture Notes
 
@@ -111,11 +128,13 @@ Causes:
 - Hash fallback links cannot reliably carry uploaded media across devices.
 - A user can generate too early if audio/image preparation has not completed.
 - Local `data:` URLs are not valid cross-device media references.
+- Local server media URLs are temporary unless the deployment filesystem is durable.
 
 Rules:
 
 - Cross-device gifts must use `/gift/[id]` links backed by saved gift data.
-- Uploaded media must become public/server-readable URLs before final share generation.
+- Uploaded media should become Supabase public URLs before final share generation in formal deployment.
+- Server media URLs are reserved for explicit validation/fallback with `NEXT_PUBLIC_BLOOMBEAT_FAST_MEDIA=1` and `BLOOMBEAT_SERVER_MEDIA_ENABLED=1`.
 - If preparation fails, show a retry path and do not create a misleading final link.
 
 ### Debug UI Leakage
@@ -126,7 +145,8 @@ Causes:
 
 Rules:
 
-- Debug UI must be behind an explicit development flag or deliberately accepted by product design.
+- Gesture debug UI is hidden by default in production/recipient-facing builds.
+- It is available in development, or explicitly with `NEXT_PUBLIC_BLOOMBEAT_GESTURE_DEBUG=1` / `?gestureDebug=1`.
 - User-facing labels should describe behavior, not raw internal thresholds.
 
 ## Validation Links
@@ -151,9 +171,9 @@ LAN:
 
 ## Next Recommended Step
 
-Proceed to Stage 9 as a stability and deployment-preparation snapshot:
+Proceed with final Stage 10 regression:
 
-- Preserve the current working Stage 8 behavior.
-- Create a new GitHub repository named `stage-9` or `stage9` depending on GitHub naming constraints.
-- Push the current code as the Stage 9 baseline.
-- Then continue with HTTPS deployment preparation and production camera validation.
+- Preserve the current working Stage 9 behavior.
+- First push the latest local `stage-10` commit to the Stage 10 snapshot repository once GitHub network access is available.
+- Run `npm.cmd run validate:stage9` against the active base URL before each deployment handoff.
+- Then continue final HTTPS mobile regression and production deployment hardening.

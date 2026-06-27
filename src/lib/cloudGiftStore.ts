@@ -41,6 +41,30 @@ export async function uploadCloudResource(dataUrl: string, kind: "image" | "audi
   return String(payload.url);
 }
 
+export async function uploadCloudFile(file: File, kind: "image" | "audio") {
+  const formData = new FormData();
+  formData.append("kind", kind);
+  formData.append("file", file);
+
+  const headers: HeadersInit = {};
+  if (process.env.NEXT_PUBLIC_BLOOMBEAT_FAST_MEDIA === "1") {
+    headers["x-bloombeat-fast-media"] = "1";
+  }
+
+  const response = await fetch("/api/upload", {
+    method: "POST",
+    headers,
+    body: formData
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new CloudGiftSaveError(payload.message || "礼物还没有准备好。", "upload", response.status);
+  }
+
+  return String(payload.url);
+}
+
 export async function saveCloudGift(draft: GiftDraft, onProgress?: (progress: CloudGiftSaveProgress) => void) {
   let audioUrl: string | undefined;
   let backgroundImageUrl: string | undefined;

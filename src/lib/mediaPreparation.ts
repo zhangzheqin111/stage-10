@@ -37,3 +37,19 @@ export function prepareCloudResourceOnce(dataUrl: string, kind: ResourceKind) {
   tasks.set(key, task);
   return task;
 }
+
+export function rememberCloudResourcePreparation(dataUrl: string, kind: ResourceKind, task: Promise<string>) {
+  if (!dataUrl.startsWith("data:")) {
+    return;
+  }
+
+  const tasks = getPreparationTasks();
+  const key = `${kind}:${dataUrl}`;
+  tasks.set(
+    key,
+    task.catch((error) => {
+      tasks.delete(key);
+      throw error;
+    })
+  );
+}

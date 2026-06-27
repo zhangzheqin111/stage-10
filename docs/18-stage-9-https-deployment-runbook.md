@@ -33,6 +33,11 @@ Rules:
 - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` may be visible to the browser.
 - `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only.
 - Do not commit `.env.local`.
+- Uploaded media should use Supabase Storage by default for durable cross-device links.
+- The local server media path is only a validation/fallback path. Enable it explicitly with both:
+  - browser/build env: `NEXT_PUBLIC_BLOOMBEAT_FAST_MEDIA=1`
+  - server env: `BLOOMBEAT_SERVER_MEDIA_ENABLED=1`
+- Do not enable server media for formal production unless the server filesystem is persistent and intentionally used as storage.
 
 ## Suggested Vercel Flow
 
@@ -88,6 +93,21 @@ Validate in this order:
    - edit forwarding title,
    - generate forwarded link.
 
+Before manual validation, run the automated smoke check against the deployment:
+
+```powershell
+$env:STAGE9_BASE_URL="https://<https-host>"
+npm.cmd run validate:stage9
+```
+
+Optional uploaded-media URL reachability check:
+
+```powershell
+$env:STAGE9_BASE_URL="https://<https-host>"
+$env:STAGE9_CHECK_MEDIA_HEAD="1"
+npm.cmd run validate:stage9
+```
+
 ## Camera Validation
 
 Only run this section on HTTPS.
@@ -133,6 +153,8 @@ Check:
 - The gift record contains public `audioUrl` and `backgroundImageUrl`.
 - Supabase Storage bucket is public or the public URL is readable.
 - Upload API returned 200 during preview/share preparation.
+- Upload API response should normally report `storage: "supabase"` in formal deployment.
+- If the response reports `storage: "server"`, confirm this was intentionally enabled for validation/fallback.
 
 ### Upload Fails
 
@@ -148,6 +170,7 @@ Check:
 Stage 9 HTTPS deployment validation is complete when:
 
 - HTTPS deployment URL is available.
+- `npm.cmd run validate:stage9` passes against the HTTPS deployment URL.
 - A system-BGM gift can be created and opened on another device.
 - An uploaded-media gift can be created and opened on another device.
 - Camera behavior is validated under HTTPS or failure falls back cleanly to touch mode.

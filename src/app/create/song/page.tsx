@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
+import { uploadCloudFile } from "@/lib/cloudGiftStore";
 import { shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
 import { GiftDraft, getDraft, saveDraft } from "@/lib/gift";
 import { fileToDataUrl, saveLocalDraft } from "@/lib/localGiftStore";
-import { prepareCloudResourceOnce } from "@/lib/mediaPreparation";
+import { rememberCloudResourcePreparation } from "@/lib/mediaPreparation";
 import { MockMusicTrack, parseMockMusicLink, searchMockMusic } from "@/lib/mockMusic";
 import { BgmPreset, previewBgmPreset, SYSTEM_BGM_PRESETS } from "@/lib/systemBgm";
 
@@ -364,7 +365,10 @@ export default function SongPage() {
     setAudioUploading(true);
 
     try {
+      const uploadFile = file.type ? file : new File([file], file.name, { type: guessAudioMime(file) });
+      const cloudAudioTask = uploadCloudFile(uploadFile, "audio");
       const localAudioUrl = ensureDataUrlMime(await fileToDataUrl(file), guessAudioMime(file));
+      rememberCloudResourcePreparation(localAudioUrl, "audio", cloudAudioTask);
       const title = file.name.replace(/\.[^.]+$/, "");
       stopPreview();
       startCreationFlow();
@@ -382,14 +386,15 @@ export default function SongPage() {
       } as const;
       persistMusicDraft(nextDraft);
       setSelectedArtist("用户上传音频");
-      setUploadMessage("正在准备音乐...");
+      setUploadMessage("音乐已放入礼物，正在准备分享版本...");
       playUploadedPreview(localAudioUrl).catch(() => undefined);
+      setAudioUploading(false);
 
-      const cloudAudioUrl = await prepareCloudResourceOnce(localAudioUrl, "audio");
+      const cloudAudioUrl = await cloudAudioTask;
       const cloudDraft = { ...nextDraft, audioUrl: cloudAudioUrl };
       setUploadedAudio({ title, audioUrl: cloudAudioUrl });
       persistMusicDraft(cloudDraft);
-      setUploadMessage("音乐已准备好，生成链接时会更快，并会保留这段音乐。");
+      setUploadMessage("音乐已准备好，可以继续编辑并生成链接。");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "未知错误";
       setUploadMessage(`音频上传失败：${msg}。请重新选择 10MB 以内的 mp3 / wav / m4a，或稍后再试。`);
@@ -585,7 +590,7 @@ export default function SongPage() {
               href="/create/content"
               onClick={() => {
                 if (audioUploading) {
-                  setUploadMessage("音乐正在准备，稍后会自动用于礼物。");
+                  setUploadMessage("音乐会继续在后台准备，你可以先编辑礼物内容。");
                 }
               }}
             >

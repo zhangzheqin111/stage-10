@@ -4,7 +4,7 @@ import { PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Category, HandLandmarker, NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { GiftDraft, GestureState, themes } from "@/lib/gift";
-import { useGestureConfigState } from "./GestureDebugPanel";
+import { GestureDebugPanel, useGestureConfigState, useGestureDebugEnabled } from "./GestureDebugPanel";
 import { createDebugBuffer, DebugSample } from "@/lib/gestureConfig";
 import { GiftBackground } from "./GiftBackground";
 import { SynthBgmButton } from "./SynthBgmButton";
@@ -99,6 +99,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function hasPlayableMusic(gift: GiftDraft) {
+  if (gift.songSourceType === "upload") return Boolean(gift.audioUrl);
   if (gift.musicSelected) return true;
   if (gift.audioUrl || gift.bgmPresetId) return true;
   return gift.songSourceType === "default" && gift.songTitle !== "未选择背景音乐";
@@ -336,7 +337,8 @@ export function GiftExperience({
   guideCompleteLabel = "查看礼物生成",
   onGuideOpenChange
 }: GiftExperienceProps) {
-  const { config } = useGestureConfigState();
+  const { config, update: updateGestureConfig } = useGestureConfigState();
+  const gestureDebugEnabled = useGestureDebugEnabled();
   // First entry shows the gesture guide; users can close it after reading.
   const [showGuide, setShowGuide] = useState(true);
   const [cameraMessage, setCameraMessage] = useState("");
@@ -747,8 +749,15 @@ export function GiftExperience({
     const movedY = previousPalm ? Math.abs(palm.y - previousPalm.y) : 0;
     const currentOpen = lastCameraOpenRef.current ?? gesture.flowerOpen;
     let nextOpen = currentOpen;
+    const isMovingForHeightOrWind =
+      movedY > cfg.movePixelThreshold * 0.72 ||
+      movedX > cfg.movePixelThreshold * 0.72 ||
+      Math.abs(nextHeight - previousControl.height) > cfg.moveHeightDeltaThreshold * 0.55 ||
+      Math.abs(nextWind - previousControl.wind) > cfg.moveWindDeltaThreshold * 0.55;
 
-    if (!openCandidateRef.current || openCandidateRef.current.value !== openCandidate) {
+    if (isMovingForHeightOrWind) {
+      openCandidateRef.current = null;
+    } else if (!openCandidateRef.current || openCandidateRef.current.value !== openCandidate) {
       openCandidateRef.current = { value: openCandidate, since: now };
     } else if (now - openCandidateRef.current.since > cfg.openDebounceMs) {
       nextOpen = openCandidate;
@@ -807,7 +816,7 @@ export function GiftExperience({
     });
     const snapshot = debugBufferRef.current.snapshot();
     setDebugSamples(snapshot.samples);
-    setDebugHint(`宸茶瘑鍒?${snapshot.samples.length} 甯?路 ${fpsValueRef.current || "--"} FPS 路 ${shouldFuse ? "鍙屾墜铻嶅悎" : "鍗曟墜"}`);
+    setDebugHint(`已识别 ${snapshot.samples.length} 帧 · ${fpsValueRef.current || "--"} FPS · ${shouldFuse ? "双手融合" : "单手"}`);
 
     updateGesture({
       mode: "camera",
@@ -1092,6 +1101,13 @@ export function GiftExperience({
         <span />
         <span />
       </div>
+      <GestureDebugPanel
+        config={config}
+        diagnosticHint={debugHint}
+        onChange={updateGestureConfig}
+        samples={debugSamples}
+        visible={gestureDebugEnabled && gesture.mode === "camera" && !showGuide}
+      />
       <div className={`camera-input ${gesture.mode === "camera" ? "visible" : ""}`}>
         <video ref={videoRef} muted playsInline aria-label="摄像头实时预览" />
         <canvas ref={previewCanvasRef} aria-hidden="true" />
@@ -1207,7 +1223,7 @@ export function GiftExperience({
                 {
                   "--plant-x": `${plant.x}px`,
                   "--plant-scale": plant.scale,
-                  "--plant-height": `${38 + gesture.plantHeight * 3.25 + plant.heightOffset}px`,
+                  "--plant-height": `${28 + gesture.plantHeight * 2.12 + plant.heightOffset}px`,
                   "--sway-delay": `${plant.delay}s`,
                   "--sway-amount": `${plant.sway + (Math.max(0, Math.abs(windOffset) - 8) / 8.2) * plant.wind}deg`,
                   "--wind-tilt": `${Math.abs(windOffset) < 8 ? 0 : (windOffset / 4.9) * plant.wind}deg`
@@ -1337,60 +1353,60 @@ export function GiftExperience({
               ) : null}
             </section>
             </div>
+          </div>
 
-            <div className="guide-actions">
+          <div className="guide-actions">
+            <button
+              className="primary-btn guide-mode-btn"
+              disabled={cameraStarting}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (guideTutorialMode === "touch") {
+                  updateGesture({ mode: "touch", type: "none" });
+                  setShowGuide(false);
+                } else if (gesture.mode === "camera") {
+                  setShowGuide(false);
+                } else {
+                  enableCameraGesture();
+                }
+              }}
+              type="button"
+            >
+              {guideTutorialMode === "touch" ? "\u4f7f\u7528\u89e6\u5c4f\u4e92\u52a8" : gesture.mode === "camera" ? "\u8fdb\u5165\u624b\u52bf\u4e92\u52a8" : cameraStarting ? "\u6b63\u5728\u6253\u5f00\u6444\u50cf\u5934" : hasCameraAccess ? "\u8fdb\u5165\u624b\u52bf\u4e92\u52a8" : "\u5f00\u542f\u624b\u52bf\u8bc6\u522b"}
+            </button>
+            <div className="guide-secondary-actions">
               <button
-                className="primary-btn guide-mode-btn"
+                className="secondary-btn guide-mode-btn"
                 disabled={cameraStarting}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation();
                   if (guideTutorialMode === "touch") {
-                    updateGesture({ mode: "touch", type: "none" });
-                    setShowGuide(false);
-                  } else if (gesture.mode === "camera") {
-                    setShowGuide(false);
-                  } else {
+                    setGuideTutorialMode("gesture");
                     enableCameraGesture();
+                  } else {
+                    setGuideTutorialMode("touch");
                   }
                 }}
                 type="button"
               >
-                {guideTutorialMode === "touch" ? "\u4f7f\u7528\u89e6\u5c4f\u4e92\u52a8" : gesture.mode === "camera" ? "\u8fdb\u5165\u624b\u52bf\u4e92\u52a8" : cameraStarting ? "\u6b63\u5728\u6253\u5f00\u6444\u50cf\u5934" : hasCameraAccess ? "\u8fdb\u5165\u624b\u52bf\u4e92\u52a8" : "\u5f00\u542f\u624b\u52bf\u8bc6\u522b"}
+                {guideTutorialMode === "touch" ? "\u91cd\u65b0\u5f00\u542f\u624b\u52bf" : "\u5207\u6362\u89e6\u5c4f\u6559\u7a0b"}
               </button>
-              <div className="guide-secondary-actions">
-                <button
-                  className="secondary-btn guide-mode-btn"
-                  disabled={cameraStarting}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (guideTutorialMode === "touch") {
-                      setGuideTutorialMode("gesture");
-                      enableCameraGesture();
-                    } else {
-                      setGuideTutorialMode("touch");
-                    }
-                  }}
-                  type="button"
-                >
-                  {guideTutorialMode === "touch" ? "\u91cd\u65b0\u5f00\u542f\u624b\u52bf" : "\u5207\u6362\u89e6\u5c4f\u6559\u7a0b"}
-                </button>
-                <button
-                  className="secondary-btn guide-mode-btn"
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (gesture.mode !== "camera") {
-                      updateGesture({ mode: "touch", type: "none" });
-                    }
-                    setShowGuide(false);
-                  }}
-                  type="button"
-                >
-                  {guideCompleteLabel}
-                </button>
-              </div>
+              <button
+                className="secondary-btn guide-mode-btn"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (gesture.mode !== "camera") {
+                    updateGesture({ mode: "touch", type: "none" });
+                  }
+                  setShowGuide(false);
+                }}
+                type="button"
+              >
+                {guideCompleteLabel}
+              </button>
             </div>
           </div>
         </div>

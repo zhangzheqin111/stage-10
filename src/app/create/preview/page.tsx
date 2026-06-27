@@ -16,6 +16,10 @@ function hasLocalUploadResource(draft: GiftDraft) {
   return Boolean(draft.audioUrl?.startsWith("data:") || draft.backgroundImageUrl?.startsWith("data:"));
 }
 
+function hasLocalImageResource(draft: GiftDraft) {
+  return Boolean(draft.backgroundImageUrl?.startsWith("data:"));
+}
+
 function getPreparationStatus(draft: GiftDraft) {
   const musicPreparing = Boolean(draft.audioUrl?.startsWith("data:"));
   const imagePreparing = Boolean(draft.backgroundImageUrl?.startsWith("data:"));
@@ -195,9 +199,11 @@ export default function PreviewPage() {
     setShareMessage(
       preparationError
         ? preparationError
-        : preparation.allReady
-          ? "默认名称来自编辑页昵称，也可以在这里修改。"
-          : "音乐或图片还在准备，完成后即可生成可转发链接。"
+        : preparation.imagePreparing
+          ? "图片还在准备，完成后即可生成可转发链接。"
+          : preparation.musicPreparing
+            ? "音乐还在同步，但不影响先生成礼物链接。"
+            : "默认名称来自编辑页昵称，也可以在这里修改。"
     );
     setShareCopied(false);
     setShareOpen(true);
@@ -240,8 +246,8 @@ export default function PreviewPage() {
     setShareCopied(false);
     setShareMessage("正在检查礼物是否准备好...");
 
-    if (hasLocalUploadResource(nextDraft)) {
-      setShareMessage("音乐或图片还在准备，完成后才能生成可转发链接。");
+    if (hasLocalImageResource(nextDraft)) {
+      setShareMessage("图片还在准备，完成后才能生成可转发链接。");
       return;
     }
 
@@ -249,12 +255,35 @@ export default function PreviewPage() {
 
     try {
       const startedAt = performance.now();
-      const cloud = await saveCloudGift(nextDraft, (progress) => {
+      const pendingAudioDataUrl = nextDraft.audioUrl?.startsWith("data:") ? nextDraft.audioUrl : "";
+      const giftForInitialLink = pendingAudioDataUrl ? { ...nextDraft, audioUrl: undefined } : nextDraft;
+      const cloud = await saveCloudGift(giftForInitialLink, (progress) => {
         setShareMessage(shareProgressMessage[progress]);
       });
       setShareUrl(`${window.location.origin}/gift/${cloud.id}`);
       const seconds = Math.max(1, Math.round((performance.now() - startedAt) / 1000));
-      setShareMessage(`礼物链接已生成，用时约 ${seconds} 秒，可以复制后发给朋友。`);
+      setShareMessage(
+        pendingAudioDataUrl
+          ? `礼物链接已生成，用时约 ${seconds} 秒。音乐还在同步，完成后会自动补进这条链接。`
+          : `礼物链接已生成，用时约 ${seconds} 秒，可以复制后发给朋友。`
+      );
+
+      if (pendingAudioDataUrl) {
+        prepareCloudResourceOnce(pendingAudioDataUrl, "audio")
+          .then((audioUrl) => {
+            const syncedDraft = { ...nextDraft, id: cloud.id, audioUrl };
+            setDraft((currentDraft) => (currentDraft?.audioUrl === pendingAudioDataUrl ? syncedDraft : currentDraft));
+            saveDraft(syncedDraft);
+            saveLocalDraft(syncedDraft).catch(() => undefined);
+            return saveCloudGift(syncedDraft);
+          })
+          .then(() => {
+            setShareMessage("音乐已同步到礼物链接，可以直接转发。");
+          })
+          .catch(() => {
+            setShareMessage("礼物链接已生成，但音乐同步失败。可以稍后重试准备音乐，或更换一段更短的音频。");
+          });
+      }
     } catch (error) {
       if (hasLocalUploadResource(nextDraft)) {
         setShareUrl("");
@@ -323,7 +352,7 @@ export default function PreviewPage() {
 
   return (
     <main className="app-shell">
-      <div className="phone-frame">
+      <div className="phone-frame preview-phone-frame">
         <AppHeader step="3 / 3 预览" />
         <GiftExperience
           actionRight={
@@ -368,7 +397,7 @@ export default function PreviewPage() {
             </label>
             <div className="share-readiness" aria-live="polite">
               <span>礼物内容已完成</span>
-              <span>{preparation.musicPreparing ? "音乐准备中" : "音乐已准备好"}</span>
+              <span>{preparation.musicPreparing ? "音乐同步中，不阻塞生成" : "音乐已准备好"}</span>
               <span>{preparation.imagePreparing ? "图片准备中" : "图片已准备好"}</span>
             </div>
             {preparationError ? (
@@ -377,7 +406,7 @@ export default function PreviewPage() {
               </button>
             ) : null}
             <button className="primary-btn share-generate-btn" disabled={shareGenerating} onClick={generateShareLink} type="button">
-              {shareGenerating ? "生成中..." : shareUrl ? "重新生成链接" : preparation.allReady ? "生成分享链接" : "准备中，稍后生成"}
+              {shareGenerating ? "生成中..." : shareUrl ? "重新生成链接" : preparation.imagePreparing ? "准备中，稍后生成" : "生成分享链接"}
             </button>
             {shareUrl ? <input className="input" readOnly value={shareUrl} /> : null}
             {shareMessage ? <p className={`hint ${shareCopied ? "copy-success" : ""}`}>{shareMessage}</p> : null}
@@ -392,7 +421,7 @@ export default function PreviewPage() {
           </div>
         ) : null}
         {!guideOpen ? (
-          <div className="footer-actions">
+          <div className="footer-actions preview-footer-actions">
             <Link className="secondary-btn" href="/create/content">
               返回编辑
             </Link>

@@ -50,6 +50,10 @@ Reason: GitHub repository URLs cannot contain a literal space in the path, so `s
 ## Open TODOs
 
 - Create/push the Stage 9 GitHub repository once repository-creation capability is available.
+- Run the repeatable local/LAN/HTTPS smoke check before deployment handoff:
+  - local: `npm.cmd run validate:stage9`
+  - LAN: `$env:STAGE9_BASE_URL="http://192.168.2.9:3001"; npm.cmd run validate:stage9`
+  - HTTPS: `$env:STAGE9_BASE_URL="https://<https-host>"; npm.cmd run validate:stage9`
 - Complete a manual mobile LAN flow for non-camera behavior:
   - start from homepage,
   - select system BGM,
@@ -60,7 +64,8 @@ Reason: GitHub repository URLs cannot contain a literal space in the path, so `s
 - Repeat the same manual flow with uploaded image/audio.
 - Deploy to HTTPS or create a stable HTTPS tunnel.
 - Validate camera permission and MediaPipe hand recognition only under HTTPS.
-- Decide whether the gesture debug panel should remain available, be gated, or be removed from recipient-facing builds.
+- Gesture debug panel decision completed: it is hidden by default in production/recipient-facing builds, available in development, and can be explicitly enabled with `NEXT_PUBLIC_BLOOMBEAT_GESTURE_DEBUG=1` or `?gestureDebug=1`.
+- Uploaded media storage decision completed for Stage 9: Supabase is the default durable path; local server media is only an explicit validation/fallback path via `NEXT_PUBLIC_BLOOMBEAT_FAST_MEDIA=1` and `BLOOMBEAT_SERVER_MEDIA_ENABLED=1`.
 - Use `docs/18-stage-9-https-deployment-runbook.md` for the HTTPS deployment and camera-validation sequence.
 
 ## Development Rules Added From Recent Failures
@@ -89,12 +94,14 @@ Reason: GitHub repository URLs cannot contain a literal space in the path, so `s
 - One stage or one clear module per turn.
 - Update logs and validation links every turn.
 - Avoid unrelated refactors while stabilizing deployment.
+- Keep raw development/debug UI behind an explicit debug flag; user-facing gift pages should stay clean by default.
 
 ## Stage 9 Acceptance Draft
 
 Stage 9 baseline is acceptable when:
 
 - The project builds with `npm.cmd run build`.
+- `npm.cmd run validate:stage9` passes against the active local or deployment base URL.
 - Core routes return 200 locally.
 - Core routes return 200 on LAN for non-camera flow.
 - Existing validated gift IDs still open.

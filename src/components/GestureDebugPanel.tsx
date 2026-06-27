@@ -14,12 +14,12 @@ type Field = {
 const fields: Field[] = [
   { key: "heightDisplacementGain", label: "高度位移系数", step: 5, min: 80, max: 320 },
   { key: "heightVelocityGain", label: "高度速度系数", step: 5, min: 60, max: 320 },
-  { key: "heightMaxStep", label: "高度每帧最大变化", step: 1, min: 5, max: 60 },
+  { key: "heightMaxStep", label: "高度单帧最大变化", step: 1, min: 5, max: 60 },
   { key: "horizontalVelocityGain", label: "横向速度系数", step: 20, min: 200, max: 1500 },
   { key: "horizontalOffsetGain", label: "横向位置系数", step: 1, min: 0, max: 40 },
   { key: "palmRollGain", label: "手掌倾斜系数", step: 4, min: 20, max: 160 },
   { key: "fingertipSwingGain", label: "指尖横摆系数", step: 4, min: 0, max: 120 },
-  { key: "windMaxStep", label: "风力每帧最大变化", step: 1, min: 5, max: 60 },
+  { key: "windMaxStep", label: "风力单帧最大变化", step: 1, min: 5, max: 60 },
   { key: "openSpreadThreshold", label: "张开判定阈值", step: 0.04, min: 0.9, max: 1.8 },
   { key: "openDebounceMs", label: "张开确认时长(ms)", step: 20, min: 60, max: 600 },
   { key: "pinchTriggerRatio", label: "捏合触发阈值", step: 0.02, min: 0.2, max: 0.7 },
@@ -30,18 +30,26 @@ const fields: Field[] = [
   { key: "fusionStreakFrames", label: "融合确认帧数", step: 1, min: 1, max: 8 },
   { key: "palmSmoothKeep", label: "掌心平滑保留(0-1)", step: 0.02, min: 0.1, max: 0.8 },
   { key: "movePixelThreshold", label: "挥动判定阈值", step: 0.002, min: 0.002, max: 0.04 },
-  { key: "moveYRatio", label: "上下/左右判定比", step: 0.04, min: 0.4, max: 1.6 },
+  { key: "moveYRatio", label: "上下/左右判定比例", step: 0.04, min: 0.4, max: 1.6 },
   { key: "lostHandHoldMs", label: "丢帧保持(ms)", step: 20, min: 60, max: 800 }
 ];
+
+export type GestureDebugSample = {
+  time: number;
+  hands: number;
+  fps: number;
+  pinchRatio: number;
+  openSpread: number;
+  height: number;
+  wind: number;
+  fusion: "fuse" | "primary";
+};
 
 export type GestureDebugProps = {
   config: GestureConfig;
   onChange: (next: Partial<GestureConfig>) => void;
-  // 实时运行时采样：最近 30 帧，每帧 { hands, fps, pinchRatio, openSpread, height, wind, fusion, time }
-  samples: Array<{ time: number; hands: number; fps: number; pinchRatio: number; openSpread: number; height: number; wind: number; fusion: "fuse" | "primary" }>;
-  // 阶段提示：例如 "首帧延迟 1240ms" "已识别 30 帧"
+  samples: GestureDebugSample[];
   diagnosticHint: string;
-  // 是否启用：只在摄像头模式显示
   visible: boolean;
 };
 
@@ -59,9 +67,7 @@ export function GestureDebugPanel({ config, onChange, samples, diagnosticHint, v
 
   const recent = samples.slice(-30);
   const last = recent[recent.length - 1];
-  const averageFps = recent.length
-    ? Math.round(recent.reduce((sum, item) => sum + item.fps, 0) / recent.length)
-    : 0;
+  const averageFps = recent.length ? Math.round(recent.reduce((sum, item) => sum + item.fps, 0) / recent.length) : 0;
   const handCounts = recent.reduce<Record<string, number>>((acc, item) => {
     acc[String(item.hands)] = (acc[String(item.hands)] ?? 0) + 1;
     return acc;
@@ -78,7 +84,7 @@ export function GestureDebugPanel({ config, onChange, samples, diagnosticHint, v
         onPointerDown={(event) => event.stopPropagation()}
         type="button"
       >
-        调参 {expanded ? "▾" : "▴"}
+        调参 {expanded ? "收起" : "展开"}
       </button>
       {expanded ? (
         <div className="gesture-debug-body" onPointerDown={(event) => event.stopPropagation()}>
@@ -111,10 +117,12 @@ export function GestureDebugPanel({ config, onChange, samples, diagnosticHint, v
             })}
           </div>
           <p className="hint">{diagnosticHint || "等待首帧..."}</p>
-          <p className="hint">阈值（拖动滑块即时生效）</p>
+          <p className="hint">阈值，拖动滑块即时生效</p>
           <div className="gesture-debug-fields">
             {fields.map((field) => {
+              const fallback = Number(defaultGestureConfig[field.key]);
               const value = Number(config[field.key]);
+              const displayValue = Number.isFinite(value) ? value : fallback;
               return (
                 <label className="gesture-debug-field" key={field.key}>
                   <span>{field.label}</span>
@@ -122,14 +130,13 @@ export function GestureDebugPanel({ config, onChange, samples, diagnosticHint, v
                     max={field.max}
                     min={field.min}
                     onChange={(event) => {
-                      const next = Number(event.target.value);
-                      onChange({ [field.key]: next } as Partial<GestureConfig>);
+                      onChange({ [field.key]: Number(event.target.value) } as Partial<GestureConfig>);
                     }}
                     step={field.step}
                     type="range"
-                    value={Number.isFinite(value) ? value : defaultGestureConfig[field.key]}
+                    value={displayValue}
                   />
-                  <strong>{value.toFixed(field.step >= 1 ? 0 : 2)}</strong>
+                  <strong>{displayValue.toFixed(field.step >= 1 ? 0 : 2)}</strong>
                 </label>
               );
             })}
@@ -171,4 +178,34 @@ export function useGestureConfigState() {
   }
 
   return { config, update };
+}
+
+export function useGestureDebugEnabled() {
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    const devDefault = process.env.NODE_ENV === "development";
+    const envEnabled = process.env.NEXT_PUBLIC_BLOOMBEAT_GESTURE_DEBUG === "1";
+    let nextEnabled = devDefault || envEnabled;
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const queryValue = params.get("gestureDebug");
+      if (queryValue === "1") {
+        window.localStorage.setItem("bloombeat-gesture-debug", "1");
+        nextEnabled = true;
+      } else if (queryValue === "0") {
+        window.localStorage.removeItem("bloombeat-gesture-debug");
+        nextEnabled = devDefault || envEnabled;
+      } else if (window.localStorage.getItem("bloombeat-gesture-debug") === "1") {
+        nextEnabled = true;
+      }
+    } catch {
+      nextEnabled = devDefault || envEnabled;
+    }
+
+    setEnabled(nextEnabled);
+  }, []);
+
+  return enabled;
 }

@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "validate:stage9": "node scripts/validate-stage9.mjs",
     "lint": "next lint"
   },
   "dependencies": {

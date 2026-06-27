@@ -8,6 +8,7 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
   const [blocked, setBlocked] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [manualVolume, setManualVolume] = useState(80);
+  const [bgmEnabled, setBgmEnabled] = useState(true);
   const audioRef = useRef<{
     context: AudioContext;
     gain: GainNode;
@@ -25,7 +26,8 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
     setManualVolume(Number(value));
   }, []);
   const displayedVolume = effectiveVolume(volume, manualVolume);
-  const muted = displayedVolume === 0 || !playing;
+  const muted = !bgmEnabled || displayedVolume === 0 || !playing;
+  const buttonLabel = !bgmEnabled ? "无 BGM" : playing ? "音乐播放中" : "播放音乐";
 
   useEffect(() => {
     volumeRef.current = volume;
@@ -49,11 +51,9 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
     }
   }, [effectiveVolume, manualVolume]);
 
-  const stop = useCallback(() => {
+  const pause = useCallback(() => {
     if (mediaRef.current) {
       mediaRef.current.pause();
-      mediaRef.current.currentTime = 0;
-      mediaRef.current = null;
       setPlaying(false);
       return;
     }
@@ -64,7 +64,23 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
       return;
     }
 
-    // 停止预设 BGM
+    audio.context.suspend().catch(() => undefined);
+    setPlaying(false);
+  }, []);
+
+  const dispose = useCallback(() => {
+    if (mediaRef.current) {
+      mediaRef.current.pause();
+      mediaRef.current.src = "";
+      mediaRef.current = null;
+    }
+
+    const audio = audioRef.current;
+    if (!audio) {
+      setPlaying(false);
+      return;
+    }
+
     if (audio.bgmPlayer) {
       audio.bgmPlayer.stop();
     }
@@ -90,6 +106,10 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
   const start = useCallback(async () => {
     if (audioUrl) {
       if (mediaRef.current) {
+        mediaRef.current.volume = effectiveVolume(volumeRef.current, manualVolumeRef.current) / 100;
+        await mediaRef.current.play();
+        setBlocked(false);
+        setPlaying(true);
         return;
       }
 
@@ -104,6 +124,11 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
     }
 
     if (audioRef.current) {
+      if (audioRef.current.context.state === "suspended") {
+        await audioRef.current.context.resume();
+        setBlocked(false);
+        setPlaying(true);
+      }
       return;
     }
 
@@ -156,16 +181,16 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
   }, [audioUrl, bgmPresetId, effectiveVolume]);
 
   useEffect(() => {
-    if (!autoStart) {
-      return stop;
+    if (!bgmEnabled || !autoStart) {
+      return dispose;
     }
 
     start().catch(() => {
       setBlocked(true);
       setPlaying(false);
     });
-    return stop;
-  }, [autoStart, start, stop]);
+    return dispose;
+  }, [autoStart, bgmEnabled, dispose, start]);
 
   return (
     <div
@@ -179,13 +204,13 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
         onClick={(event) => {
           event.stopPropagation();
           setPanelOpen((open) => !open);
-          if (!playing) {
+          if (bgmEnabled && !playing) {
             start().catch(() => setBlocked(true));
           }
         }}
         type="button"
-        aria-label="调整音乐音量"
-        title={blocked ? "点击播放并调整音量" : "调整音乐音量"}
+        aria-label="音乐控制"
+        title={blocked ? "点击播放音乐" : "音乐控制"}
       >
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           {muted ? (
@@ -200,10 +225,10 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
             />
           )}
         </svg>
-        音量
+        {buttonLabel}
       </button>
       {panelOpen ? (
-        <div className="volume-popover" onClick={(event) => event.stopPropagation()}>
+        <div className="volume-popover music-popover" onClick={(event) => event.stopPropagation()}>
           <label>
             <span>音量 {manualVolume}%</span>
             <span className="volume-slider-wrap">
@@ -219,15 +244,48 @@ export function SynthBgmButton({ audioUrl, bgmPresetId, autoStart = true, volume
               />
             </span>
           </label>
+          <div className="music-popover-actions">
+            <button
+              className="volume-stop-btn"
+              disabled={!bgmEnabled}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (playing) {
+                  pause();
+                } else {
+                  start().catch(() => setBlocked(true));
+                }
+              }}
+              type="button"
+            >
+              {playing ? "暂停音乐" : "继续播放"}
+            </button>
+            <button
+              className="volume-stop-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (bgmEnabled) {
+                  dispose();
+                  setBgmEnabled(false);
+                } else {
+                  setBgmEnabled(true);
+                  start().catch(() => setBlocked(true));
+                }
+              }}
+              type="button"
+            >
+              {bgmEnabled ? "关闭 BGM" : "恢复 BGM"}
+            </button>
+          </div>
           <button
-            className="volume-stop-btn"
+            className="volume-stop-btn music-popover-close"
             onClick={(event) => {
               event.stopPropagation();
-              stop();
+              setPanelOpen(false);
             }}
             type="button"
           >
-            暂停音乐
+            收起
           </button>
         </div>
       ) : null}

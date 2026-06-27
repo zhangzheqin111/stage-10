@@ -951,6 +951,35 @@ button {
   color: var(--ink);
 }
 
+.share-readiness {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid rgba(199, 96, 138, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 248, 251, 0.78);
+  color: rgba(67, 52, 60, 0.76);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.audio-size-choice {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(201, 149, 66, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 248, 231, 0.82);
+  color: var(--ink);
+}
+
+.audio-size-choice-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .share-generate-btn {
   width: 100%;
   min-height: 42px;
@@ -992,6 +1021,10 @@ button {
   background: linear-gradient(180deg, #fff8fb, #f5fbff);
   touch-action: none;
   user-select: none;
+}
+
+.gift-stage.guide-open {
+  touch-action: pan-y;
 }
 
 /* 全屏 H5 礼物页 */
@@ -1320,7 +1353,7 @@ button {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 34px;
+  padding-bottom: 88px;
 }
 
 .garden {
@@ -1694,25 +1727,28 @@ button {
   backdrop-filter: blur(14px);
 }
 
+.music-popover {
+  width: min(236px, calc(100vw - 28px));
+  justify-items: stretch;
+}
+
 .volume-popover label {
   display: grid;
-  justify-items: center;
-  gap: 10px;
+  gap: 8px;
   font-size: 12px;
   font-weight: 700;
 }
 
 .volume-slider-wrap {
-  height: 134px;
-  width: 42px;
+  height: auto;
+  width: 100%;
   display: grid;
   place-items: center;
 }
 
 .volume-range {
-  width: 134px;
-  transform: rotate(-90deg);
-  transform-origin: center;
+  width: 100%;
+  transform: none;
 }
 
 .volume-stop-btn {
@@ -1721,6 +1757,21 @@ button {
   border-radius: 999px;
   color: rgba(67, 52, 60, 0.78);
   background: rgba(255, 255, 255, 0.72);
+}
+
+.volume-stop-btn:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.music-popover-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.music-popover-close {
+  width: 100%;
 }
 
 .camera-launch-fab {
@@ -1766,24 +1817,55 @@ button {
   inset: 0;
   z-index: 20;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 20px;
+  padding: max(14px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
   background: rgba(67, 52, 60, 0.26);
   backdrop-filter: blur(10px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .guide-card {
   width: min(100%, 340px);
   display: grid;
-  gap: 12px;
-  max-height: calc(100dvh - 70px);
-  overflow-y: auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0;
+  max-height: calc(100dvh - 36px);
+  max-height: calc(100svh - 36px);
+  margin: auto 0;
+  overflow: hidden;
   padding: 0;
   background: transparent;
   border: 0;
   border-radius: 8px;
   overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.guide-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 10px;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.guide-actions {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.72) 18%, rgba(255, 255, 255, 0.86));
+}
+
+.guide-secondary-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .guide-section {
@@ -1794,6 +1876,93 @@ button {
   box-shadow: var(--shadow);
 }
 
+.compact-guide {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.compact-guide > strong {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.guide-permission-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid rgba(67, 52, 60, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  color: rgba(67, 52, 60, 0.72);
+  font-size: 12px;
+}
+
+.guide-permission-note strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.guide-steps {
+  display: grid;
+  gap: 5px;
+}
+
+.gesture-mini-grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+.guide-steps .guide-item {
+  grid-template-columns: 26px 1fr;
+  gap: 4px 8px;
+  min-height: 0;
+  padding: 6px 8px;
+}
+
+.guide-steps .guide-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
+
+.guide-steps .guide-item strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.guide-steps .guide-item .hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.compact-camera-panel {
+  min-height: 78px;
+  max-height: 92px;
+}
+
+.compact-camera-message {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.25;
+  max-height: 32px;
+  overflow: hidden;
+}
+
+.compact-diagnostics {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.compact-diagnostics summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .guide-camera-btn {
   width: 100%;
   margin-top: 12px;
@@ -1801,7 +1970,7 @@ button {
 
 .guide-mode-btn {
   width: 100%;
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .camera-status-pill {
@@ -2009,6 +2178,13 @@ button {
     padding: 10px;
   }
 
+  .guide-card {
+    margin: 0;
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    max-height: calc(100svh - 20px);
+  }
+
   .guide-section {
     padding: 14px;
   }
@@ -2047,6 +2223,47 @@ button {
 }
 
 /* ---- 系统 BGM 预设卡片 ---- */
+@media (max-height: 720px) {
+  .phone-frame-full .music-box-wrap {
+    padding-bottom: 72px;
+  }
+
+  .phone-frame-full .garden {
+    transform: scale(0.9) translateY(-8px);
+  }
+
+  .phone-frame-full .data-panel {
+    top: max(10px, env(safe-area-inset-top));
+    width: min(210px, calc(100% - 96px));
+    padding: 8px 10px;
+  }
+
+  .phone-frame-full .data-panel p {
+    font-size: 11px;
+  }
+
+  .phone-frame-full .music-controls,
+  .phone-frame-full .gift-action-right {
+    bottom: max(12px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-height: 640px) {
+  .phone-frame-full .garden {
+    transform: scale(0.84) translateY(-10px);
+  }
+
+  .phone-frame-full .music-box-wrap {
+    padding-bottom: 62px;
+  }
+
+  .phone-frame-full .speaker-btn,
+  .phone-frame-full .share-fab {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}
+
 .bgm-preset-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

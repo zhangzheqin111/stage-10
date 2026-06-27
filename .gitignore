@@ -32,4 +32,7 @@ dev-server.log
 dev-server.err.log
 dev-logs/tunnel.log
 cloudflared.exe
+cloudflared*.log
+prod-server*.log
 .workbuddy/
+.data/

@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import { PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Category, HandLandmarker, NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { GiftDraft, GestureState, themes } from "@/lib/gift";
-import { GestureDebugPanel, useGestureConfigState } from "./GestureDebugPanel";
+import { useGestureConfigState } from "./GestureDebugPanel";
 import { createDebugBuffer, DebugSample } from "@/lib/gestureConfig";
 import { GiftBackground } from "./GiftBackground";
 import { SynthBgmButton } from "./SynthBgmButton";
@@ -42,12 +42,28 @@ type CameraDiagnostics = {
   lastErrorName: string;
 };
 
+const cameraStageDisplay: Record<CameraStage, string> = {
+  idle: "未开启",
+  requesting: "正在打开摄像头",
+  "tracking-loading": "正在准备识别",
+  "tracking-ready": "手势识别已开启",
+  "touch-fallback": "触摸备用"
+};
+
+const cameraPermissionDisplay: Record<CameraDiagnostics["permission"], string> = {
+  granted: "已允许",
+  denied: "已拒绝",
+  prompt: "待询问",
+  unknown: "未知",
+  unsupported: "不可查询"
+};
+
 const cameraStageLabel: Record<CameraStage, string> = {
   idle: "未开启",
   requesting: "请求权限",
   "tracking-loading": "准备识别",
   "tracking-ready": "实时识别",
-  "touch-fallback": "触摸兜底"
+  "touch-fallback": "触摸备用"
 };
 
 const cameraPermissionLabel: Record<CameraDiagnostics["permission"], string> = {
@@ -80,6 +96,12 @@ function averagePoint(points: NormalizedLandmark[]) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function hasPlayableMusic(gift: GiftDraft) {
+  if (gift.musicSelected) return true;
+  if (gift.audioUrl || gift.bgmPresetId) return true;
+  return gift.songSourceType === "default" && gift.songTitle !== "未选择背景音乐";
 }
 
 function fingerSpreadScore(landmarks: NormalizedLandmark[], palmCenter: { x: number; y: number }) {
@@ -301,16 +323,30 @@ function drawHandsOverlay(
   }
 }
 
-export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode; gift: GiftDraft }) {
-  const { config, update: updateConfig } = useGestureConfigState();
+type GiftExperienceProps = {
+  actionRight?: ReactNode;
+  gift: GiftDraft;
+  guideCompleteLabel?: string;
+  onGuideOpenChange?: (open: boolean) => void;
+};
+
+export function GiftExperience({
+  actionRight,
+  gift,
+  guideCompleteLabel = "鏌ョ湅绀肩墿鐢熸垚",
+  onGuideOpenChange
+}: GiftExperienceProps) {
+  const { config } = useGestureConfigState();
   // First entry shows the gesture guide; users can close it after reading.
   const [showGuide, setShowGuide] = useState(true);
   const [cameraMessage, setCameraMessage] = useState("");
   const [guideMode, setGuideMode] = useState<GestureState["mode"]>("touch");
+  const [guideTutorialMode, setGuideTutorialMode] = useState<"gesture" | "touch">("gesture");
   const [cameraStarting, setCameraStarting] = useState(false);
   const [handTrackingReady, setHandTrackingReady] = useState(false);
   const [hasCameraAccess, setHasCameraAccess] = useState(false);
   const [cameraStage, setCameraStage] = useState<CameraStage>("idle");
+  const [modelPrewarming, setModelPrewarming] = useState(false);
   const [cameraDiagnostics, setCameraDiagnostics] = useState<CameraDiagnostics>({
     secureContext: true,
     apiSupported: true,
@@ -318,7 +354,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     lastErrorName: ""
   });
   const [debugSamples, setDebugSamples] = useState<DebugSample[]>([]);
-  const [debugHint, setDebugHint] = useState("等待摄像头开启...");
+  const [debugHint, setDebugHint] = useState("绛夊緟鎽勫儚澶村紑鍚?..");
   const [firstFrameLatency, setFirstFrameLatency] = useState<number | null>(null);
   const [lastErrorStack, setLastErrorStack] = useState<string>("");
   const debugBufferRef = useRef(createDebugBuffer());
@@ -346,6 +382,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
   const guideCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const handLandmarkerRef = useRef<HandLandmarker | null>(null);
+  const handLandmarkerPromiseRef = useRef<Promise<HandLandmarker> | null>(null);
   const detectionFrameRef = useRef<number | null>(null);
   const previousPalmRef = useRef<{ x: number; y: number } | null>(null);
   const previousHandPalmsRef = useRef<Record<string, { x: number; y: number }>>({});
@@ -364,7 +401,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
 
   const theme = themes[gift.theme];
   const windOffset = gesture.windPower - 50;
-  const windDisplay = Math.abs(windOffset) < 8 ? "微风 0" : `${windOffset > 0 ? "东风" : "西风"} +${Math.abs(windOffset)}`;
+  const windDisplay = Math.abs(windOffset) < 8 ? "寰 0" : `${windOffset > 0 ? "涓滈" : "瑗块"} +${Math.abs(windOffset)}`;
   const blessingLines = useMemo(() => {
     const density = gift.blessingDensity ?? 50;
     const lineCount = density === 15 ? 2 : density === 30 ? 3 : density === 50 ? 5 : 7;
@@ -397,6 +434,32 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
   useEffect(() => {
     updateCameraDiagnostics();
   }, []);
+
+  useEffect(() => {
+    onGuideOpenChange?.(showGuide);
+  }, [onGuideOpenChange, showGuide]);
+
+  useEffect(() => {
+    if (cameraStage === "touch-fallback") {
+      setGuideTutorialMode("touch");
+    }
+  }, [cameraStage]);
+
+  useEffect(() => {
+    if (!showGuide || handLandmarkerRef.current || handLandmarkerPromiseRef.current) {
+      return;
+    }
+
+    setModelPrewarming(true);
+    ensureHandLandmarker()
+      .then(() => {
+        setModelPrewarming(false);
+      })
+      .catch((error) => {
+        setModelPrewarming(false);
+        updateCameraDiagnostics(error instanceof DOMException ? error.name : "HandLandmarkerLoadError");
+      });
+  }, [showGuide]);
 
   useEffect(() => {
     const stream = cameraStreamRef.current;
@@ -507,7 +570,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
   }
 
   function getInsecureCameraMessage() {
-    return "手机浏览器通常只允许 HTTPS 页面访问摄像头；当前局域网 HTTP 页面无法唤起摄像头，已自动切换为触摸模式。";
+    return "手机浏览器通常只允许 HTTPS 页面访问摄像头；当前页面无法唤起摄像头，已自动切换为触摸模式。";
   }
 
   function openCurrentGuide() {
@@ -520,18 +583,27 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       return handLandmarkerRef.current;
     }
 
-    const { FilesetResolver, HandLandmarker } = await import("@mediapipe/tasks-vision");
-    const vision = await FilesetResolver.forVisionTasks(visionWasmUrl);
-    const landmarker = await HandLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath: handLandmarkerModelUrl,
-        delegate: "GPU"
-      },
-      numHands: 2,
-      runningMode: "VIDEO"
-    });
-    handLandmarkerRef.current = landmarker;
-    return landmarker;
+    if (!handLandmarkerPromiseRef.current) {
+      handLandmarkerPromiseRef.current = (async () => {
+        const { FilesetResolver, HandLandmarker } = await import("@mediapipe/tasks-vision");
+        const vision = await FilesetResolver.forVisionTasks(visionWasmUrl);
+        const landmarker = await HandLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: handLandmarkerModelUrl,
+            delegate: "GPU"
+          },
+          numHands: 2,
+          runningMode: "VIDEO"
+        });
+        handLandmarkerRef.current = landmarker;
+        return landmarker;
+      })().catch((error) => {
+        handLandmarkerPromiseRef.current = null;
+        throw error;
+      });
+    }
+
+    return handLandmarkerPromiseRef.current;
   }
 
   function getCameraHandSignal(item: TrackedHand, cfg: typeof config) {
@@ -704,7 +776,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     lastCameraControlRef.current = { height: nextHeight, wind: nextWind, time: now };
     lastHandSeenAtRef.current = now;
 
-    // 真机调参：每帧推入采样（FPS、手数、捏合比、张开分、当前高度/风力、融合模式）。
+    // Keep a compact rolling sample for the optional gesture debug panel.
     const fpsState = fpsCountRef.current;
     if (fpsState.lastTime === 0) {
       fpsState.lastTime = now;
@@ -735,7 +807,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     });
     const snapshot = debugBufferRef.current.snapshot();
     setDebugSamples(snapshot.samples);
-    setDebugHint(`已识别 ${snapshot.samples.length} 帧 · ${fpsValueRef.current || "--"} FPS · ${shouldFuse ? "双手融合" : "单手"}`);
+    setDebugHint(`宸茶瘑鍒?${snapshot.samples.length} 甯?路 ${fpsValueRef.current || "--"} FPS 路 ${shouldFuse ? "鍙屾墜铻嶅悎" : "鍗曟墜"}`);
 
     updateGesture({
       mode: "camera",
@@ -832,6 +904,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       updateCameraDiagnostics("UnsupportedMediaDevices");
       setCameraMessage("当前浏览器不支持摄像头访问，已自动使用触摸模式。");
       setGuideMode("touch");
+      setGuideTutorialMode("touch");
       updateGesture({ mode: "touch", type: "none" });
       setHasCameraAccess(false);
       setCameraStage("touch-fallback");
@@ -845,7 +918,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
     cameraHeightOriginRef.current = null;
     fusionModeRef.current = { mode: "primary", streak: 0 };
     setCameraStage("requesting");
-    setCameraMessage("正在启动摄像头...");
+    setCameraMessage("正在打开摄像头，请允许浏览器访问。");
 
     try {
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -860,15 +933,16 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       updateCameraDiagnostics("");
       updateGesture({ mode: "camera", type: "none" });
       setGuideMode("camera");
+      setGuideTutorialMode("gesture");
       setCameraStage("tracking-loading");
-      setCameraMessage("摄像头已开启，正在准备手势识别...");
+      setCameraMessage("摄像头已开启，正在准备手势识别。");
       setCameraStarting(false);
 
       try {
         await ensureHandLandmarker();
         setHandTrackingReady(true);
         setCameraStage("tracking-ready");
-        setCameraMessage("手势识别已开启；画面仅在本机实时识别，不保存、不上传。");
+        setCameraMessage("手势识别已开启；画面只在本机实时识别，不保存、不上传。");
         window.setTimeout(startHandDetection, 0);
       } catch (error) {
         stopHandDetection();
@@ -878,10 +952,11 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         updateCameraDiagnostics(errorName);
         setLastErrorStack(error instanceof Error ? error.stack ?? error.message : String(error));
         setGuideMode("touch");
+        setGuideTutorialMode("touch");
         setHandTrackingReady(false);
         setCameraStage("touch-fallback");
         updateGesture({ mode: "touch", type: "none" });
-        setCameraMessage("手势识别资源加载失败，已自动切换为触摸模式。你仍可以用下面的触摸方式完成互动和分享。");
+        setCameraMessage("手势识别资源加载失败，已自动切换为触摸模式。");
       }
     } catch (error) {
       stopHandDetection();
@@ -891,11 +966,12 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       updateCameraDiagnostics(errorName);
       setLastErrorStack(error instanceof Error ? error.stack ?? error.message : String(error));
       setGuideMode("touch");
+      setGuideTutorialMode("touch");
       setHandTrackingReady(false);
       setHasCameraAccess(false);
       setCameraStage("touch-fallback");
       updateGesture({ mode: "touch", type: "none" });
-      setCameraMessage(`${getCameraErrorMessage(error)}你仍可以用下面的触摸方式完成互动和分享。`);
+      setCameraMessage(`${getCameraErrorMessage(error)}你仍可以用触摸方式完成互动和分享。`);
     } finally {
       setCameraStarting(false);
     }
@@ -983,7 +1059,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
 
   return (
     <section
-      className="gift-stage"
+      className={`gift-stage ${showGuide ? "guide-open" : ""}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -1097,7 +1173,7 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
                 animationDelay: `${index * -0.7}s`
               }}
             >
-              <WaveText text={`${gift.blessingText} · ${gift.blessingText}`} />
+              <WaveText text={`${gift.blessingText} 路 ${gift.blessingText}`} />
             </span>
           </span>
         ))}
@@ -1170,18 +1246,12 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
         onPointerUp={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
-        <SynthBgmButton audioUrl={gift.audioUrl} bgmPresetId={gift.bgmPresetId} autoStart={!showGuide} volume={gesture.volume} />
+        {hasPlayableMusic(gift) ? (
+          <SynthBgmButton audioUrl={gift.audioUrl} bgmPresetId={gift.bgmPresetId} autoStart={!showGuide} volume={gesture.volume} />
+        ) : null}
       </div>
 
-      <GestureDebugPanel
-        config={config}
-        diagnosticHint={debugHint}
-        onChange={updateConfig}
-        samples={debugSamples}
-        visible={gesture.mode === "camera"}
-      />
-
-      {actionRight ? (
+      {actionRight && !showGuide ? (
         <div
           className="gift-action-right"
           onPointerDown={(event) => event.stopPropagation()}
@@ -1212,116 +1282,116 @@ export function GiftExperience({ actionRight, gift }: { actionRight?: ReactNode;
       {showGuide ? (
         <div className="guide-overlay" onPointerDown={(event) => event.stopPropagation()}>
           <div className="guide-card">
-            <section className="guide-section primary-guide">
-              <strong>{guideMode === "camera" || showInitialCameraGuide ? "舞动双手，唤醒这片花园" : "用触摸继续唤醒花园"}</strong>
+            <div className="guide-scroll">
+            <section className="guide-section primary-guide compact-guide">
+              <strong>{guideTutorialMode === "touch" ? "\u89e6\u5c4f\u4e5f\u80fd\u73a9\u8fd9\u4efd\u793c\u7269" : "\u7528\u624b\u52bf\u5524\u9192\u8fd9\u4efd\u793c\u7269"}</strong>
+              {guideTutorialMode === "touch" ? (
+                <div className="camera-status-pill touch-fallback">{"\u89e6\u5c4f\u73a9\u6cd5"}</div>
+              ) : (
+                <div className="guide-permission-note">
+                  <span>{"\u6444\u50cf\u5934"}</span>
+                  <strong>{modelPrewarming && cameraStage === "idle" ? "\u6b63\u5728\u63d0\u524d\u51c6\u5907\u8bc6\u522b" : cameraStageDisplay[cameraStage]}</strong>
+                </div>
+              )}
               {guideMode === "camera" ? (
-                <div className="camera-live-panel">
-                  <video ref={guideVideoRef} muted playsInline aria-label="摄像头实时预览" />
+                <div className="camera-live-panel compact-camera-panel">
+                  <video ref={guideVideoRef} muted playsInline aria-label={"\u6444\u50cf\u5934\u5b9e\u65f6\u9884\u89c8"} />
                   <canvas ref={guideCanvasRef} aria-hidden="true" />
-                  <span>{handTrackingReady ? "手势识别中" : cameraStageLabel[cameraStage]}</span>
+                  <span>{handTrackingReady ? "\u624b\u52bf\u8bc6\u522b\u4e2d" : cameraStageDisplay[cameraStage]}</span>
                 </div>
               ) : null}
-              <div className={`camera-status-pill ${cameraStage}`}>
-                摄像头状态：{cameraStageLabel[cameraStage]}
-              </div>
-              <div className="camera-diagnostics" aria-label="摄像头诊断">
-                <span>
-                  安全来源 <strong>{cameraDiagnostics.secureContext ? "可用" : "需要 HTTPS"}</strong>
-                </span>
-                <span>
-                  浏览器摄像头 <strong>{cameraDiagnostics.apiSupported ? "支持" : "不支持"}</strong>
-                </span>
-                <span>
-                  权限 <strong>{cameraPermissionLabel[cameraDiagnostics.permission]}</strong>
-                </span>
-                {cameraDiagnostics.lastErrorName ? (
+              {guideTutorialMode === "touch" ? (
+                <div className="guide-steps gesture-mini-grid">
+                  <GuideItem icon={"↕"} title={"\u4e0a\u4e0b\u6ed1\u52a8"} text={"\u63a7\u5236\u82b1\u9ad8\u548c\u97f3\u91cf\u5f3a\u5f31\u3002"} />
+                  <GuideItem icon={"↔"} title={"\u5de6\u53f3\u6ed1\u52a8"} text={"\u6539\u53d8\u98ce\u5411\u548c\u6446\u52a8\u611f\u3002"} />
+                  <GuideItem icon={"○"} title={"\u70b9\u51fb\u82b1\u6735"} text={"\u5f00\u653e\u6216\u95ed\u5408\u3002"} />
+                  <GuideItem icon={"✦"} title={"\u53cc\u51fb\u5c4f\u5e55"} text={"\u5207\u6362\u82b1\u56ed\u989c\u8272\u3002"} />
+                </div>
+              ) : (
+                <div className="guide-steps gesture-mini-grid">
+                  <GuideItem icon={"↕"} title={"\u4e0a\u4e0b\u62ac\u624b"} text={"\u63a7\u5236\u82b1\u9ad8\u548c\u97f3\u91cf\u3002"} />
+                  <GuideItem icon={"↔"} title={"\u5de6\u53f3\u6325\u624b"} text={"\u6539\u53d8\u98ce\u5411\u3002"} />
+                  <GuideItem icon={"握"} title={"\u63e1\u62f3"} text={"\u8ba9\u82b1\u6735\u95ed\u5408\u6216\u91cd\u65b0\u6253\u5f00\u3002"} />
+                  <GuideItem icon={"捏"} title={"\u98df\u6307\u62c7\u6307\u634f\u5408"} text={"\u5207\u6362\u82b1\u6735\u989c\u8272\u3002"} />
+                </div>
+              )}
+              {cameraMessage && guideTutorialMode !== "touch" ? <p className="hint compact-camera-message">{cameraMessage}</p> : null}
+              {guideTutorialMode !== "touch" ? (
+                <details className="camera-diagnostics compact-diagnostics">
+                  <summary>{"\u6444\u50cf\u5934\u72b6\u6001"}</summary>
                   <span>
-                    最近错误 <strong>{cameraDiagnostics.lastErrorName}</strong>
+                    {"\u5b89\u5168\u6765\u6e90"} <strong>{cameraDiagnostics.secureContext ? "\u53ef\u7528" : "\u9700\u8981 HTTPS"}</strong>
                   </span>
-                ) : null}
-              </div>
-              <div className="camera-diagnostics camera-diagnostics-extra" aria-label="摄像头真机诊断">
-                <span>
-                  设备 <strong>{typeof navigator !== "undefined" && navigator.userAgent ? navigator.userAgent.split(") ")[0].replace("(", "") : "未知"}</strong>
-                </span>
-                <span>
-                  摄像头分辨率 <strong>{typeof window !== "undefined" && videoRef.current?.videoWidth ? `${videoRef.current.videoWidth}×${videoRef.current.videoHeight}` : "未就绪"}</strong>
-                </span>
-                <span>
-                  首帧延迟 <strong>{firstFrameLatency === null ? "测量中" : `${firstFrameLatency}ms`}</strong>
-                </span>
-                <span>
-                  已识别帧数 <strong>{debugSamples.length}</strong>
-                </span>
-                {lastErrorStack ? (
-                  <span className="camera-diagnostics-stack">
-                    错误详情 <strong>{lastErrorStack.split("\n")[0]}</strong>
+                  <span>
+                    {"\u6d4f\u89c8\u5668\u6444\u50cf\u5934"} <strong>{cameraDiagnostics.apiSupported ? "\u652f\u6301" : "\u4e0d\u652f\u6301"}</strong>
                   </span>
-                ) : null}
-              </div>
-            {showInitialCameraGuide ? (
+                  <span>
+                    {"\u6743\u9650"} <strong>{cameraPermissionDisplay[cameraDiagnostics.permission]}</strong>
+                  </span>
+                  {cameraDiagnostics.lastErrorName ? (
+                    <span>
+                      {"\u6700\u8fd1\u9519\u8bef"} <strong>{cameraDiagnostics.lastErrorName}</strong>
+                    </span>
+                  ) : null}
+                </details>
+              ) : null}
+            </section>
+            </div>
+
+            <div className="guide-actions">
               <button
-                className="primary-btn guide-camera-btn"
+                className="primary-btn guide-mode-btn"
                 disabled={cameraStarting}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation();
-                  enableCameraGesture();
+                  if (guideTutorialMode === "touch") {
+                    updateGesture({ mode: "touch", type: "none" });
+                    setShowGuide(false);
+                  } else if (gesture.mode === "camera") {
+                    setShowGuide(false);
+                  } else {
+                    enableCameraGesture();
+                  }
                 }}
                 type="button"
               >
-                {cameraModeButtonText}
+                {guideTutorialMode === "touch" ? "\u4f7f\u7528\u89e6\u5c4f\u4e92\u52a8" : gesture.mode === "camera" ? "\u8fdb\u5165\u624b\u52bf\u4e92\u52a8" : cameraStarting ? "\u6b63\u5728\u6253\u5f00\u6444\u50cf\u5934" : hasCameraAccess ? "\u8fdb\u5165\u624b\u52bf\u4e92\u52a8" : "\u5f00\u542f\u624b\u52bf\u8bc6\u522b"}
               </button>
-            ) : null}
-            {guideMode === "camera" ? (
-              <div className="guide-grid camera-guide-grid">
-                <GuideItem icon="↕" title="掌心上移 / 下移" text="花朵长高变矮；越高声音越大，越矮声音越小" />
-                <GuideItem icon="↔" title="手掌左右摇晃" text="掌心移动、手腕摇晃和指尖横摆都会改变西风 / 东风和音量" />
-                <GuideItem icon="开" title="张开五指并拢双拳" text="花朵张开闭合" />
-                <GuideItem icon="捏" title="拇指与食指孔雀形状捏合" text="颜色切换" />
+              <div className="guide-secondary-actions">
+                <button
+                  className="secondary-btn guide-mode-btn"
+                  disabled={cameraStarting}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (guideTutorialMode === "touch") {
+                      setGuideTutorialMode("gesture");
+                      enableCameraGesture();
+                    } else {
+                      setGuideTutorialMode("touch");
+                    }
+                  }}
+                  type="button"
+                >
+                  {guideTutorialMode === "touch" ? "\u91cd\u65b0\u5f00\u542f\u624b\u52bf" : "\u5207\u6362\u89e6\u5c4f\u6559\u7a0b"}
+                </button>
+                <button
+                  className="secondary-btn guide-mode-btn"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (gesture.mode !== "camera") {
+                      updateGesture({ mode: "touch", type: "none" });
+                    }
+                    setShowGuide(false);
+                  }}
+                  type="button"
+                >
+                  {guideCompleteLabel}
+                </button>
               </div>
-            ) : null}
-            {guideMode === "touch" && !showInitialCameraGuide ? (
-              <div className="guide-grid">
-                <GuideItem icon="↕" title="上下滑动" text="越高声音越大，越矮声音越小" />
-                <GuideItem icon="↔" title="左右滑动" text="越靠左声音越小，越靠右声音越大" />
-                <GuideItem icon="◌" title="点击花朵" text="开放或闭合" />
-                <GuideItem icon="✦" title="双击屏幕" text="整片花园统一换色" />
-              </div>
-            ) : null}
-            {guideMode === "camera" ? <p className="hint">双手同向会一起参与识别；双手动作差别较大时优先按右手控制。</p> : null}
-            {cameraMessage ? <p className="hint">{cameraMessage}</p> : null}
-          </section>
-
-          <button
-            className="secondary-btn guide-mode-btn"
-            disabled={cameraStarting}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (gesture.mode === "camera") {
-                switchToTouchMode();
-              } else {
-                enableCameraGesture();
-              }
-            }}
-            type="button"
-          >
-            {gesture.mode === "camera" ? "切换为触摸互动" : "回到摄像头手势"}
-          </button>
-            <button
-              className="primary-btn"
-              onClick={(event) => {
-                event.stopPropagation();
-                if (gesture.mode !== "camera") {
-                  updateGesture({ mode: "touch", type: "none" });
-                }
-                setShowGuide(false);
-              }}
-              type="button"
-            >
-              我知道了
-            </button>
+            </div>
           </div>
         </div>
       ) : null}

@@ -1,15 +1,52 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { GiftExperience } from "@/components/GiftExperience";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { saveCloudGift } from "@/lib/cloudGiftStore";
+import { CloudGiftSaveError, CloudGiftSaveProgress, saveCloudGift } from "@/lib/cloudGiftStore";
 import { shouldStartFromGuide } from "@/lib/creationFlow";
 import { buildShareUrl } from "@/lib/giftCodec";
 import { GiftDraft, getDraft, saveDraft } from "@/lib/gift";
 import { getLocalDraft, saveLocalDraft } from "@/lib/localGiftStore";
+import { prepareCloudResourceOnce } from "@/lib/mediaPreparation";
+
+function hasLocalUploadResource(draft: GiftDraft) {
+  return Boolean(draft.audioUrl?.startsWith("data:") || draft.backgroundImageUrl?.startsWith("data:"));
+}
+
+function getPreparationStatus(draft: GiftDraft) {
+  const musicPreparing = Boolean(draft.audioUrl?.startsWith("data:"));
+  const imagePreparing = Boolean(draft.backgroundImageUrl?.startsWith("data:"));
+
+  return {
+    musicPreparing,
+    imagePreparing,
+    allReady: !musicPreparing && !imagePreparing
+  };
+}
+
+const shareProgressMessage: Record<CloudGiftSaveProgress, string> = {
+  "upload-audio": "正在准备音乐...",
+  "upload-image": "正在准备图片...",
+  "save-gift": "正在生成礼物链接..."
+};
+
+function getFallbackShareMessage(error: unknown, draft: GiftDraft) {
+  const reason =
+    error instanceof CloudGiftSaveError
+      ? `${error.phase === "upload" ? "礼物还没有准备好" : "礼物链接生成失败"}：${error.message}`
+      : error instanceof Error
+        ? error.message
+        : "礼物链接暂时生成失败";
+
+  const resourceHint = hasLocalUploadResource(draft)
+    ? "请稍等一下，等音乐或图片准备好后再生成链接。"
+    : "已生成自包含兜底链接，可先复制转发。";
+
+  return `${reason}。${resourceHint}`;
+}
 
 function getDefaultGiftTitle(draft: GiftDraft) {
   const displayName = draft.recipientName.trim() || "TA";
@@ -25,6 +62,8 @@ export default function PreviewPage() {
   const [shareGenerating, setShareGenerating] = useState(false);
   const [shareTitle, setShareTitle] = useState("");
   const [marqueeMessage, setMarqueeMessage] = useState("");
+  const [guideOpen, setGuideOpen] = useState(true);
+  const preparingResourcesRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (shouldStartFromGuide()) {
@@ -41,7 +80,7 @@ export default function PreviewPage() {
         }
 
         const mergedDraft = { ...savedDraft, ...localDraft };
-        if (!localDraft.audioUrl && savedDraft.audioUrl) {
+        if (savedDraft.audioUrl && (!localDraft.audioUrl || localDraft.audioUrl.startsWith("data:"))) {
           mergedDraft.audioUrl = savedDraft.audioUrl;
           mergedDraft.songSourceType = "upload";
           mergedDraft.musicSelected = true;
@@ -49,13 +88,74 @@ export default function PreviewPage() {
           mergedDraft.artist = savedDraft.artist;
           mergedDraft.bgmPresetId = undefined;
         }
-        if (!localDraft.backgroundImageUrl && savedDraft.backgroundImageUrl) {
+        if (savedDraft.backgroundImageUrl && (!localDraft.backgroundImageUrl || localDraft.backgroundImageUrl.startsWith("data:"))) {
           mergedDraft.backgroundImageUrl = savedDraft.backgroundImageUrl;
         }
         setDraft(mergedDraft);
       })
       .catch(() => setDraft(getDraft()));
   }, []);
+
+  useEffect(() => {
+    if (!draft) return;
+
+    const audioDataUrl = draft.audioUrl?.startsWith("data:") ? draft.audioUrl : "";
+    const imageDataUrl = draft.backgroundImageUrl?.startsWith("data:") ? draft.backgroundImageUrl : "";
+
+    if (!audioDataUrl && !imageDataUrl) {
+      return;
+    }
+
+    if (audioDataUrl && !preparingResourcesRef.current.has(audioDataUrl)) {
+      preparingResourcesRef.current.add(audioDataUrl);
+      prepareCloudResourceOnce(audioDataUrl, "audio")
+        .then((url) => {
+          if (cancelled) return;
+          setDraft((currentDraft) => {
+            if (!currentDraft || currentDraft.audioUrl !== audioDataUrl) return currentDraft;
+            const nextDraft = { ...currentDraft, audioUrl: url };
+            saveDraft(nextDraft);
+            saveLocalDraft(nextDraft).catch(() => undefined);
+            const preparation = getPreparationStatus(nextDraft);
+            setShareMessage((message) =>
+              message.includes("准备") ? (preparation.allReady ? "音乐和图片已准备好，可以生成可转发链接。" : "音乐已准备好，图片如果还在准备会继续处理。") : message
+            );
+            return nextDraft;
+          });
+        })
+        .catch(() => {
+          preparingResourcesRef.current.delete(audioDataUrl);
+        });
+    }
+
+    if (imageDataUrl && !preparingResourcesRef.current.has(imageDataUrl)) {
+      preparingResourcesRef.current.add(imageDataUrl);
+      prepareCloudResourceOnce(imageDataUrl, "image")
+        .then((url) => {
+          if (cancelled) return;
+          setDraft((currentDraft) => {
+            if (!currentDraft || currentDraft.backgroundImageUrl !== imageDataUrl) return currentDraft;
+            const nextDraft = { ...currentDraft, backgroundImageUrl: url };
+            saveDraft(nextDraft);
+            saveLocalDraft(nextDraft).catch(() => undefined);
+            const preparation = getPreparationStatus(nextDraft);
+            setShareMessage((message) =>
+              message.includes("准备") ? (preparation.allReady ? "音乐和图片已准备好，可以生成可转发链接。" : "图片已准备好，音乐如果还在准备会继续处理。") : message
+            );
+            return nextDraft;
+          });
+        })
+        .catch(() => {
+          preparingResourcesRef.current.delete(imageDataUrl);
+        });
+    }
+
+    let cancelled = false;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draft]);
 
   if (!draft) {
     return (
@@ -81,7 +181,8 @@ export default function PreviewPage() {
     saveLocalDraft(nextDraft).catch(() => undefined);
     setShareUrl("");
     setShareTitle(defaultTitle);
-    setShareMessage("默认名称来自编辑页昵称，也可以在这里修改。");
+    const preparation = getPreparationStatus(nextDraft);
+    setShareMessage(preparation.allReady ? "默认名称来自编辑页昵称，也可以在这里修改。" : "音乐或图片还在准备，完成后即可生成可转发链接。");
     setShareCopied(false);
     setShareOpen(true);
   }
@@ -114,16 +215,31 @@ export default function PreviewPage() {
     setShareTitle(nextTitle);
     setShareUrl("");
     setShareCopied(false);
-    setShareMessage("正在生成礼物链接...");
+    setShareMessage("正在检查礼物是否准备好...");
+
+    if (hasLocalUploadResource(nextDraft)) {
+      setShareMessage("音乐或图片还在准备，完成后才能生成可转发链接。");
+      return;
+    }
+
     setShareGenerating(true);
 
     try {
-      const cloud = await saveCloudGift(nextDraft);
+      const startedAt = performance.now();
+      const cloud = await saveCloudGift(nextDraft, (progress) => {
+        setShareMessage(shareProgressMessage[progress]);
+      });
       setShareUrl(`${window.location.origin}/gift/${cloud.id}`);
-      setShareMessage("礼物链接已生成，可复制后发给朋友。");
-    } catch {
-      setShareUrl(buildShareUrl(nextDraft, window.location.origin));
-      setShareMessage("云端保存暂不可用，已生成自包含链接；上传音频或图片跨设备分享需后续云端配置。");
+      const seconds = Math.max(1, Math.round((performance.now() - startedAt) / 1000));
+      setShareMessage(`礼物链接已生成，用时约 ${seconds} 秒，可以复制后发给朋友。`);
+    } catch (error) {
+      if (hasLocalUploadResource(nextDraft)) {
+        setShareUrl("");
+        setShareMessage(`礼物还没有准备好，请稍等一下再生成链接。${getFallbackShareMessage(error, nextDraft)}`);
+      } else {
+        setShareUrl(buildShareUrl(nextDraft, window.location.origin));
+        setShareMessage(getFallbackShareMessage(error, nextDraft));
+      }
     } finally {
       setShareGenerating(false);
     }
@@ -152,21 +268,35 @@ export default function PreviewPage() {
     }
   }
 
-  function shareViaSystem() {
+  async function shareViaSystem() {
     if (!shareUrl) return;
 
     if (typeof navigator !== "undefined" && (navigator as any).share) {
-      (navigator as any)
-        .share({ title: shareTitle.trim() || draft?.title || "BloomBeat 礼物", text: "送你一份特别的音乐礼物", url: shareUrl })
-        .catch(() => {
-          // User cancelled or the browser refused native sharing.
-        });
-    } else {
-      copyShareLink();
+      try {
+        await (navigator as any).share({ title: shareTitle.trim() || draft?.title || "BloomBeat 礼物", text: "送你一份特别的音乐礼物", url: shareUrl });
+        setShareMessage("已打开系统分享面板。");
+        return;
+      } catch {
+        const copied = await copyTextToClipboard(shareUrl);
+        setShareCopied(copied);
+        setShareMessage(copied ? "当前系统暂不支持该功能，链接已复制，可直接粘贴分享。" : "当前系统暂不支持该功能，请手动复制链接后分享。");
+        if (copied) {
+          window.setTimeout(() => setShareCopied(false), 1800);
+        }
+        return;
+      }
+    }
+
+    const copied = await copyTextToClipboard(shareUrl);
+    setShareCopied(copied);
+    setShareMessage(copied ? "当前系统暂不支持该功能，链接已复制，可直接粘贴分享。" : "当前系统暂不支持该功能，请手动复制链接后分享。");
+    if (copied) {
+      window.setTimeout(() => setShareCopied(false), 1800);
     }
   }
 
   const marqueeEnabled = draft.blessingMarqueeEnabled ?? true;
+  const preparation = getPreparationStatus(draft);
 
   return (
     <main className="app-shell">
@@ -192,6 +322,8 @@ export default function PreviewPage() {
             </button>
           }
           gift={draft}
+          guideCompleteLabel="查看礼物生成"
+          onGuideOpenChange={setGuideOpen}
         />
         {marqueeMessage ? <div className="preview-toast">{marqueeMessage}</div> : null}
         {shareOpen ? (
@@ -200,7 +332,7 @@ export default function PreviewPage() {
               ×
             </button>
             <strong>分享这份礼物</strong>
-            <p className="hint">默认名称来自编辑页昵称；你也可以在这里修改，礼品卡题目会同步更新。</p>
+            <p className="hint">默认名称来自编辑页昵称；也可以在这里修改，礼物卡题目会同步更新。</p>
             <label className="share-title-field">
               <span>礼物名字</span>
               <input
@@ -211,8 +343,13 @@ export default function PreviewPage() {
                 value={shareTitle}
               />
             </label>
+            <div className="share-readiness" aria-live="polite">
+              <span>礼物内容已完成</span>
+              <span>{preparation.musicPreparing ? "音乐准备中" : "音乐已准备好"}</span>
+              <span>{preparation.imagePreparing ? "图片准备中" : "图片已准备好"}</span>
+            </div>
             <button className="primary-btn share-generate-btn" disabled={shareGenerating} onClick={generateShareLink} type="button">
-              {shareGenerating ? "生成中..." : shareUrl ? "重新生成链接" : "生成分享链接"}
+              {shareGenerating ? "生成中..." : shareUrl ? "重新生成链接" : preparation.allReady ? "生成分享链接" : "准备中，稍后生成"}
             </button>
             {shareUrl ? <input className="input" readOnly value={shareUrl} /> : null}
             {shareMessage ? <p className={`hint ${shareCopied ? "copy-success" : ""}`}>{shareMessage}</p> : null}
@@ -221,19 +358,21 @@ export default function PreviewPage() {
                 {shareCopied ? "已复制" : shareGenerating ? "生成中" : "复制链接"}
               </button>
               <button className="primary-btn" disabled={!shareUrl || shareGenerating} onClick={shareViaSystem} type="button">
-                系统分享
+                分享至
               </button>
             </div>
           </div>
         ) : null}
-        <div className="footer-actions">
-          <Link className="secondary-btn" href="/create/content">
-            返回编辑
-          </Link>
-          <button className="primary-btn" disabled={shareGenerating} onClick={openShare} type="button">
-            {shareGenerating ? "生成中..." : "完成并分享"}
-          </button>
-        </div>
+        {!guideOpen ? (
+          <div className="footer-actions">
+            <Link className="secondary-btn" href="/create/content">
+              返回编辑
+            </Link>
+            <button className="primary-btn" disabled={shareGenerating} onClick={openShare} type="button">
+              {shareGenerating ? "生成中..." : "完成并分享"}
+            </button>
+          </div>
+        ) : null}
       </div>
     </main>
   );

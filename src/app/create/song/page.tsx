@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
 import { GiftDraft, getDraft, saveDraft } from "@/lib/gift";
 import { fileToDataUrl, saveLocalDraft } from "@/lib/localGiftStore";
+import { prepareCloudResourceOnce } from "@/lib/mediaPreparation";
 import { MockMusicTrack, parseMockMusicLink, searchMockMusic } from "@/lib/mockMusic";
 import { BgmPreset, previewBgmPreset, SYSTEM_BGM_PRESETS } from "@/lib/systemBgm";
 
@@ -15,7 +16,9 @@ type ParseMusicLinkResult =
   | { ok: false; message: string };
 
 const previewDurationMs = 10000;
-const maxAudioUploadSize = 10 * 1024 * 1024;
+const recommendedAudioUploadSize = 5 * 1024 * 1024;
+const maxAudioUploadSize = 6 * 1024 * 1024;
+const absoluteAudioUploadSize = 10 * 1024 * 1024;
 
 function canUseAudioFile(file: File) {
   const normalizedName = file.name.toLowerCase();
@@ -29,6 +32,21 @@ function canUseAudioFile(file: File) {
     normalizedName.endsWith(".wav") ||
     normalizedName.endsWith(".m4a")
   );
+}
+
+function guessAudioMime(file: File) {
+  const normalizedName = file.name.toLowerCase();
+  if (file.type) return file.type;
+  if (normalizedName.endsWith(".mp3")) return "audio/mpeg";
+  if (normalizedName.endsWith(".wav")) return "audio/wav";
+  if (normalizedName.endsWith(".m4a")) return "audio/mp4";
+  return "audio/mpeg";
+}
+
+function ensureDataUrlMime(dataUrl: string, mime: string) {
+  if (!dataUrl.startsWith("data:")) return dataUrl;
+  if (!dataUrl.startsWith("data:;base64,")) return dataUrl;
+  return dataUrl.replace("data:;base64,", `data:${mime};base64,`);
 }
 
 async function parseMusicLink(url: string): Promise<ParseMusicLinkResult> {
@@ -83,6 +101,8 @@ export default function SongPage() {
   const [keyword, setKeyword] = useState("");
   const [recommendations, setRecommendations] = useState<MockMusicTrack[]>([]);
   const [uploadMessage, setUploadMessage] = useState("");
+  const [audioUploading, setAudioUploading] = useState(false);
+  const [largeAudioCandidate, setLargeAudioCandidate] = useState<File | null>(null);
   const [uploadedAudio, setUploadedAudio] = useState<{ title: string; audioUrl: string } | null>(null);
   const [uploadFileName, setUploadFileName] = useState("");
   const previewRef = useRef<{ context: AudioContext; oscillators: OscillatorNode[] } | null>(null);
@@ -103,7 +123,7 @@ export default function SongPage() {
       return;
     }
 
-    // 同步读 localStorage（不再依赖异步 IndexedDB），立刻拿到 draft
+    // Read the visible draft synchronously so mobile pages show the current selection immediately.
     const visibleDraft = getDraft();
     if (visibleDraft.musicSelected) {
       setSelected(visibleDraft.songTitle);
@@ -122,7 +142,6 @@ export default function SongPage() {
       previewTimerRef.current = null;
     }
 
-    // 停止系统 BGM 预设试听（新）
     if (bgmPreviewStopRef.current) {
       bgmPreviewStopRef.current();
       bgmPreviewStopRef.current = null;
@@ -179,9 +198,7 @@ export default function SongPage() {
     previewTimerRef.current = window.setTimeout(stopPreview, previewDurationMs);
   }
 
-  /**
-   * 使用新预设引擎试听系统 BGM（6 种预设音色）。
-   */
+  // Preview the selected system BGM preset.
   function playBgmPreview(preset: BgmPreset) {
     stopPreview();
     bgmPreviewStopRef.current = previewBgmPreset(preset, previewDurationMs);
@@ -206,7 +223,7 @@ export default function SongPage() {
   }
 
   async function chooseBgm(preset: BgmPreset) {
-    console.log("[song] chooseBgm 点击", preset.title);
+    console.log("[song] chooseBgm", preset.title);
     const currentDraft = getDraft();
     const nextDraft = {
       ...currentDraft,
@@ -221,12 +238,11 @@ export default function SongPage() {
     setSelected(preset.title);
     setSelectedArtist("BloomBeat 系统 BGM");
     setUploadMessage(`已选择系统 BGM：${preset.title}（${preset.instrument}）。`);
-    // 同步写入 localStorage，立即可读
     try {
       persistMusicDraft(nextDraft);
-      console.log("[song] saveDraft 成功，localStorage 大小：", window.localStorage.getItem("bloombeat-draft")?.length ?? 0);
+      console.log("[song] saveDraft success, localStorage size", window.localStorage.getItem("bloombeat-draft")?.length ?? 0);
     } catch (err) {
-      console.error("[song] saveDraft 失败", err);
+      console.error("[song] saveDraft failed", err);
     }
     try {
       playBgmPreview(preset);
@@ -250,10 +266,9 @@ export default function SongPage() {
     startCreationFlow();
     setSelected(audio.title);
     setSelectedArtist("用户上传音频");
-    // 同步写入 localStorage（包含 audioUrl data URL）
     persistMusicDraft(nextDraft);
     setUploadMessage("已重新使用上传音频作为背景音乐。");
-    playUploadedPreview(audio.audioUrl).catch(() => setUploadMessage("已使用上传音频，但浏览器需要点击页面后才能试听。"));
+    playUploadedPreview(audio.audioUrl).catch(() => setUploadMessage("已使用上传音频；浏览器需要点击页面后才能试听。"));
   }
 
   async function chooseMockTrack(track: MockMusicTrack, sourceType: "link" | "recommendation") {
@@ -263,18 +278,17 @@ export default function SongPage() {
       songSourceType: sourceType,
       musicSelected: true,
       songTitle: track.title,
-      artist: `${track.artist} · ${track.platform}`,
+      artist: `${track.artist} 路 ${track.platform}`,
       audioUrl: undefined,
       bgmPresetId: undefined
     } as const;
 
     startCreationFlow();
     setSelected(track.title);
-    setSelectedArtist(`${track.artist} · ${track.platform}`);
+    setSelectedArtist(`${track.artist} 路 ${track.platform}`);
     if (sourceType === "link") {
       setResolvedTrack(track);
     }
-    // 同步写入 localStorage
     persistMusicDraft(nextDraft);
     setUploadMessage(`已选择：${track.title}。`);
     try {
@@ -282,6 +296,28 @@ export default function SongPage() {
     } catch {
       setUploadMessage(`已选择：${track.title}，但当前浏览器需要再次点击后才能试听。`);
     }
+  }
+
+  function clearMusicSelection() {
+    stopPreview();
+    const currentDraft = getDraft();
+    const nextDraft = {
+      ...currentDraft,
+      songSourceType: "default" as const,
+      musicSelected: false,
+      songTitle: "未选择背景音乐",
+      artist: "",
+      audioUrl: undefined,
+      bgmPresetId: undefined
+    };
+
+    setSelected("");
+    setSelectedArtist("");
+    setResolvedTrack(null);
+    setUploadedAudio(null);
+    setUploadFileName("");
+    setUploadMessage("已删除背景音乐，生成后的礼物页不会播放 BGM。");
+    persistMusicDraft(nextDraft);
   }
 
   async function handleParseLink() {
@@ -309,7 +345,7 @@ export default function SongPage() {
     searchMusic(normalized).then(setRecommendations);
   }
 
-  async function handleAudioUpload(file?: File) {
+  async function handleAudioUpload(file?: File, allowLargeAudio = false) {
     if (!file) {
       return;
     }
@@ -319,21 +355,29 @@ export default function SongPage() {
       return;
     }
 
-    if (file.size > maxAudioUploadSize) {
-      setUploadMessage("音频超过 10MB，请压缩或裁剪后重新上传。");
+    if (file.size > absoluteAudioUploadSize) {
+      setLargeAudioCandidate(null);
+      setUploadMessage("音频超过 10MB，暂时无法继续准备。请更换一段更短的 mp3 / wav / m4a。");
       return;
     }
 
-    setUploadMessage("正在读取音频...");
+    if (file.size > maxAudioUploadSize && !allowLargeAudio) {
+      setLargeAudioCandidate(file);
+      setUploadMessage("音频超过 6MB，准备时间可能较久。请选择继续使用原音频或更换音频。");
+      return;
+    }
+
+    setLargeAudioCandidate(null);
+    setUploadMessage(file.size > recommendedAudioUploadSize ? "音频较大，准备可能会久一点。建议使用 60 秒以内、5MB 以内音频。" : "正在读取音频...");
+    setAudioUploading(true);
 
     try {
-      const audioUrl = await fileToDataUrl(file);
+      const localAudioUrl = ensureDataUrlMime(await fileToDataUrl(file), guessAudioMime(file));
       const title = file.name.replace(/\.[^.]+$/, "");
       stopPreview();
       startCreationFlow();
-      setUploadedAudio({ title, audioUrl });
+      setUploadedAudio({ title, audioUrl: localAudioUrl });
       setSelected(title);
-      // 同步写入 localStorage（含 audioUrl），保证预览/礼物页能立刻读到
       const currentDraft = getDraft();
       const nextDraft = {
         ...currentDraft,
@@ -341,16 +385,24 @@ export default function SongPage() {
         musicSelected: true,
         songTitle: title,
         artist: "用户上传音频",
-        audioUrl,
+        audioUrl: localAudioUrl,
         bgmPresetId: undefined
       } as const;
       persistMusicDraft(nextDraft);
       setSelectedArtist("用户上传音频");
-      setUploadMessage("音频已保存到礼物草稿，可进入下一步。");
-      playUploadedPreview(audioUrl).catch(() => setUploadMessage("音频已保存；浏览器需要点击页面后才能试听。"));
+      setUploadMessage("正在准备音乐...");
+      playUploadedPreview(localAudioUrl).catch(() => undefined);
+
+      const cloudAudioUrl = await prepareCloudResourceOnce(localAudioUrl, "audio");
+      const cloudDraft = { ...nextDraft, audioUrl: cloudAudioUrl };
+      setUploadedAudio({ title, audioUrl: cloudAudioUrl });
+      persistMusicDraft(cloudDraft);
+      setUploadMessage("音乐已准备好，生成链接时会更快，并会保留这段音乐。");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "未知错误";
-      setUploadMessage(`音频读取失败（${msg}），请重新选择一个 10MB 以内的常见音频格式。`);
+      setUploadMessage(`音频上传失败：${msg}。请重新选择 10MB 以内的 mp3 / wav / m4a，或稍后再试。`);
+    } finally {
+      setAudioUploading(false);
     }
   }
 
@@ -361,7 +413,7 @@ export default function SongPage() {
         <section className="section soft-card stack">
           <div>
             <h1 className="page-title">将音乐卡带放进你的礼物盒~</h1>
-            <p className="lead">可以通过下列四种方式选一首最想送给 TA 的歌。</p>
+            <p className="lead">可以通过四种方式选择想送给 TA 的音乐。</p>
           </div>
 
           <div className="current-choice">
@@ -370,6 +422,9 @@ export default function SongPage() {
               <>
                 <strong>{selected}</strong>
                 <p className="hint">{selectedArtist}</p>
+                <button className="secondary-btn compact-btn use-track-btn" onClick={clearMusicSelection} type="button">
+                  删除音乐
+                </button>
               </>
             ) : (
               <div className="state-card compact">
@@ -399,7 +454,7 @@ export default function SongPage() {
                 <div>
                   <strong>{resolvedTrack.title}</strong>
                   <p className="hint">
-                    {resolvedTrack.artist} · {resolvedTrack.platform}
+                    {resolvedTrack.artist} 路 {resolvedTrack.platform}
                   </p>
                   <button className="secondary-btn compact-btn use-track-btn" onClick={() => chooseMockTrack(resolvedTrack, "link")} type="button">
                     使用这首歌
@@ -417,7 +472,7 @@ export default function SongPage() {
               placeholder="输入歌手名字、场景或想到的一个词"
               value={keyword}
             />
-            <p className="hint">若无相关推荐，您可以尝试直接上传音频文件，或使用系统 BGM。</p>
+            <p className="hint">若无相关推荐，可以直接上传音频文件，或使用系统 BGM。</p>
             {keyword.trim() ? (
               recommendations.length > 0 ? (
                 <div className="stack">
@@ -432,7 +487,7 @@ export default function SongPage() {
                       <span>
                         <strong>{track.title}</strong>
                         <p className="hint">
-                          {track.artist} · {track.platform} · {track.mood}
+                          {track.artist} 路 {track.platform} 路 {track.mood}
                         </p>
                       </span>
                     </button>
@@ -463,6 +518,28 @@ export default function SongPage() {
             </label>
             <p className="hint">支持 mp3 / wav / m4a，文件大小不超过 10MB。</p>
             {uploadMessage ? <p className="hint">{uploadMessage}</p> : null}
+            {largeAudioCandidate ? (
+              <div className="audio-size-choice">
+                <strong>音频文件较大</strong>
+                <p className="hint">当前版本不会改动你的原音频，但大文件准备会更久。你可以继续使用原音频，或更换一段更短的音频。</p>
+                <div className="audio-size-choice-actions">
+                  <button className="primary-btn compact-btn" onClick={() => handleAudioUpload(largeAudioCandidate, true)} type="button">
+                    继续使用原音频
+                  </button>
+                  <button
+                    className="secondary-btn compact-btn"
+                    onClick={() => {
+                      setLargeAudioCandidate(null);
+                      setUploadFileName("");
+                      setUploadMessage("已取消当前音频，请重新选择 5MB 以内或 60 秒以内的音频。");
+                    }}
+                    type="button"
+                  >
+                    更换音频
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {uploadedAudio ? (
               <div className="music-result">
                 <span className="mock-cover uploaded-cover" />
@@ -511,7 +588,15 @@ export default function SongPage() {
             <Link className="secondary-btn" href="/">
               返回
             </Link>
-            <Link className="primary-btn" href="/create/content">
+            <Link
+              className="primary-btn"
+              href="/create/content"
+              onClick={() => {
+                if (audioUploading) {
+                  setUploadMessage("音乐正在准备，稍后会自动用于礼物。");
+                }
+              }}
+            >
               下一步
             </Link>
           </div>

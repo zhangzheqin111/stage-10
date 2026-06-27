@@ -5,18 +5,26 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { GiftExperience } from "@/components/GiftExperience";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { getCloudGift } from "@/lib/cloudGiftStore";
+import { getCloudGift, saveCloudGift } from "@/lib/cloudGiftStore";
 import { decodeDraftFromHash } from "@/lib/giftCodec";
-import { getDraft } from "@/lib/gift";
+import { GiftDraft, getDraft } from "@/lib/gift";
+
+const fallbackGiftTitle = "BloomBeat 礼物";
+
+function normalizeShareTitle(value: string, gift?: GiftDraft | null) {
+  return value.trim().slice(0, 30) || gift?.title || fallbackGiftTitle;
+}
 
 export default function GiftPage() {
-  const [gift, setGift] = useState<ReturnType<typeof getDraft> | null>(null);
+  const [gift, setGift] = useState<GiftDraft | null>(null);
   const [missing, setMissing] = useState(false);
   const [missingMessage, setMissingMessage] = useState("这份礼物暂时无法打开。链接可能已失效，或礼物还没有保存成功。");
   const [audioHint, setAudioHint] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
   const [shareCopied, setShareCopied] = useState(false);
+  const [shareSaving, setShareSaving] = useState(false);
+  const [shareTitle, setShareTitle] = useState("");
   const [currentShareUrl, setCurrentShareUrl] = useState("");
   const params = useParams<{ id: string }>();
 
@@ -28,13 +36,12 @@ export default function GiftPage() {
     let cancelled = false;
 
     async function loadGift() {
-      // ---------- 第一优先级：URL hash 自包含礼物 ----------
       if (params.id === "share") {
         const draftFromHash = decodeDraftFromHash(window.location.hash);
         if (draftFromHash) {
           if (!cancelled) {
             setGift(draftFromHash);
-            // 分享链接不含上传音频，给出提示
+            setShareTitle(draftFromHash.title || fallbackGiftTitle);
             if (draftFromHash.songSourceType === "upload" && !draftFromHash.audioUrl) {
               setAudioHint("这份礼物原本含有自定义音频，但自定义音频无法放入分享链接。已自动使用系统 BGM 代替，不影响其他效果。");
             }
@@ -48,29 +55,29 @@ export default function GiftPage() {
         return;
       }
 
-      // ---------- 第二优先级：demo 模式走 localStorage ----------
       if (params.id === "demo") {
         const localDraft = getDraft();
         if (!cancelled) {
           setGift(localDraft);
+          setShareTitle(localDraft.title || fallbackGiftTitle);
           setAudioHint("");
         }
         return;
       }
 
-      // ---------- 第三优先级：云端礼物 ----------
       const cloudGift = await getCloudGift(params.id);
       if (cancelled) return;
 
       if (cloudGift.ok) {
         setGift(cloudGift.gift);
+        setShareTitle(cloudGift.gift.title || fallbackGiftTitle);
         return;
       }
 
-      // -------- 兜底：localStorage（可能和生成者是同一设备） --------
       const localDraft = getDraft();
       if (localDraft && localDraft.musicSelected) {
         setGift(localDraft);
+        setShareTitle(localDraft.title || fallbackGiftTitle);
         return;
       }
 
@@ -85,10 +92,13 @@ export default function GiftPage() {
     }
 
     loadGift().catch((err) => {
-      console.error("[gift] loadGift 失败", err);
+      console.error("[gift] loadGift failed", err);
       if (!cancelled) setMissing(true);
     });
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id]);
 
   useEffect(() => {
@@ -99,6 +109,89 @@ export default function GiftPage() {
     const timer = window.setTimeout(() => setAudioHint(""), 6000);
     return () => window.clearTimeout(timer);
   }, [audioHint]);
+
+  function openSharePanel() {
+    setCurrentShareUrl(window.location.href);
+    setShareTitle(gift?.title || fallbackGiftTitle);
+    setShareMessage("可以先改礼物卡名字，再生成新的转发链接。");
+    setShareCopied(false);
+    setShareOpen(true);
+  }
+
+  function updateShareTitle(value: string) {
+    const nextTitle = value.slice(0, 30);
+    setShareTitle(nextTitle);
+    setShareCopied(false);
+    setShareMessage("名字已更新，点击“更新转发链接”后会生成新的礼物链接。");
+    setGift((current) => (current ? { ...current, title: normalizeShareTitle(nextTitle, current) } : current));
+  }
+
+  async function saveForwardLink() {
+    if (!gift) return;
+
+    const nextTitle = normalizeShareTitle(shareTitle, gift);
+    const nextGift = { ...gift, title: nextTitle };
+    setGift(nextGift);
+    setShareTitle(nextTitle);
+    setShareSaving(true);
+    setShareCopied(false);
+    setShareMessage("正在保存新的礼物卡名字...");
+
+    try {
+      const cloud = await saveCloudGift(nextGift);
+      const nextUrl = `${window.location.origin}/gift/${cloud.id}`;
+      setCurrentShareUrl(nextUrl);
+      setGift({ ...cloud.gift, title: nextTitle });
+      setShareMessage("新的转发链接已生成，可以复制或分享至系统应用。");
+    } catch (err) {
+      console.error("[gift] saveForwardLink failed", err);
+      setShareMessage("名字已在当前页面更新，但新转发链接保存失败。请稍后再试。");
+    } finally {
+      setShareSaving(false);
+    }
+  }
+
+  async function copyGiftLink() {
+    const shareUrl = currentShareUrl || window.location.href;
+    const copied = await copyTextToClipboard(shareUrl);
+    setShareCopied(copied);
+    setShareMessage(copied ? "礼物链接已复制，可以继续转发这份心意。" : "复制失败，请长按链接或手动选中后复制。");
+    if (copied) {
+      window.setTimeout(() => setShareCopied(false), 1800);
+    }
+  }
+
+  async function shareViaSystem() {
+    const shareUrl = currentShareUrl || window.location.href;
+    const title = normalizeShareTitle(shareTitle, gift);
+
+    if (typeof navigator !== "undefined" && (navigator as any).share) {
+      try {
+        await (navigator as any).share({
+          title,
+          text: `送你一份特别的音乐礼物：${title}`,
+          url: shareUrl
+        });
+        setShareMessage("已打开系统分享面板。");
+        return;
+      } catch {
+        const copied = await copyTextToClipboard(shareUrl);
+        setShareCopied(copied);
+        setShareMessage(copied ? "当前系统暂不支持该功能，链接已复制，可直接粘贴分享。" : "当前系统暂不支持该功能，请手动复制链接后分享。");
+        if (copied) {
+          window.setTimeout(() => setShareCopied(false), 1800);
+        }
+        return;
+      }
+    }
+
+    const copied = await copyTextToClipboard(shareUrl);
+    setShareCopied(copied);
+    setShareMessage(copied ? "当前系统暂不支持该功能，链接已复制，可直接粘贴分享。" : "当前系统暂不支持该功能，请手动复制链接后分享。");
+    if (copied) {
+      window.setTimeout(() => setShareCopied(false), 1800);
+    }
+  }
 
   if (missing) {
     return (
@@ -136,41 +229,13 @@ export default function GiftPage() {
     );
   }
 
-  async function handleShare() {
-    const shareUrl = currentShareUrl || window.location.href;
-    // 尝试系统分享
-    if (typeof navigator !== "undefined" && (navigator as any).share) {
-      try {
-        await (navigator as any).share({ title: "BloomBeat 礼物", text: "送你一份特别的音乐礼物", url: shareUrl });
-        return;
-      } catch {
-        // 用户取消或失败，继续弹窗
-      }
-    }
-    // 弹出自定义面板
-    setCurrentShareUrl(window.location.href);
-    setShareOpen(true);
-  }
-
-  async function copyGiftLink() {
-    const shareUrl = currentShareUrl || window.location.href;
-    const copied = await copyTextToClipboard(shareUrl);
-    setShareCopied(copied);
-    setShareMessage(copied ? "礼物链接已复制，可以继续转发这份心意。" : "复制失败，请长按链接或手动选中后复制。");
-    if (copied) {
-      window.setTimeout(() => setShareCopied(false), 1800);
-    }
-  }
-
   return (
     <main className="app-shell-full">
       <div className="phone-frame-full">
-        {audioHint ? (
-          <div className="audio-hint-banner">{audioHint}</div>
-        ) : null}
+        {audioHint ? <div className="audio-hint-banner">{audioHint}</div> : null}
         <GiftExperience
           actionRight={
-            <button className="share-fab" onClick={handleShare} type="button" aria-label="转发礼物">
+            <button className="share-fab" onClick={openSharePanel} type="button" aria-label="转发礼物">
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
                 <path
                   d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7a3.34 3.34 0 0 0 0-1.4l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81a3 3 0 1 0 0 4.38l7.12 4.16c-.05.21-.07.43-.07.65a2.92 2.92 0 1 0 2.91-2.92Z"
@@ -188,12 +253,30 @@ export default function GiftPage() {
               ×
             </button>
             <strong>转发这份礼物</strong>
-            <p className="hint">复制礼物链接，让更多人看到这份心意。</p>
+            <p className="hint">二次转发前可以修改礼物卡名字，生成的新链接会保留这个名字。</p>
+            <label className="share-title-field">
+              礼物卡名字
+              <input
+                className="input"
+                maxLength={30}
+                onChange={(event) => updateShareTitle(event.target.value)}
+                placeholder="给这份礼物取个名字"
+                value={shareTitle}
+              />
+            </label>
+            <button className="primary-btn share-generate-btn" disabled={shareSaving} onClick={saveForwardLink} type="button">
+              {shareSaving ? "保存中..." : "更新转发链接"}
+            </button>
             <input className="input" readOnly value={currentShareUrl} />
             {shareMessage ? <p className={`hint ${shareCopied ? "copy-success" : ""}`}>{shareMessage}</p> : null}
-            <button className="primary-btn" onClick={copyGiftLink} type="button">
-              {shareCopied ? "已复制" : "复制链接"}
-            </button>
+            <div className="share-popover-actions">
+              <button className={`secondary-btn ${shareCopied ? "copy-done" : ""}`} disabled={shareSaving} onClick={copyGiftLink} type="button">
+                {shareCopied ? "已复制" : "复制链接"}
+              </button>
+              <button className="primary-btn" disabled={shareSaving} onClick={shareViaSystem} type="button">
+                分享至
+              </button>
+            </div>
           </div>
         ) : null}
       </div>

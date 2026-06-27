@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, cloudUnconfiguredMessage } from "@/lib/supabaseAdmin";
 
 const allowedTypes = {
-  audio: new Set(["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/aac"])
+  audio: new Set(["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/aac", "audio/m4a", "audio/x-m4a"])
 };
 
 const maxUploadBytes = {
@@ -25,7 +25,7 @@ function parseDataUrl(dataUrl: string) {
 function extensionFor(contentType: string) {
   if (contentType === "audio/mpeg") return "mp3";
   if (contentType === "audio/wav" || contentType === "audio/x-wav") return "wav";
-  if (contentType === "audio/mp4" || contentType === "audio/aac") return "m4a";
+  if (contentType === "audio/mp4" || contentType === "audio/aac" || contentType === "audio/m4a" || contentType === "audio/x-m4a") return "m4a";
   if (contentType === "image/jpeg") return "jpg";
   if (contentType === "image/png") return "png";
   if (contentType === "image/webp") return "webp";

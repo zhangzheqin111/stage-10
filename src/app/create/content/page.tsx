@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,24 +8,45 @@ import { AppHeader } from "@/components/AppHeader";
 import { GiftBackground } from "@/components/GiftBackground";
 import { shouldStartFromGuide, startCreationFlow } from "@/lib/creationFlow";
 import { GiftDraft, getDraft, normalizeBlessing, saveDraft, themes, ThemeKey } from "@/lib/gift";
-import { compressImage, saveLocalDraft } from "@/lib/localGiftStore";
+import { compressImage, getLocalDraft, saveLocalDraft } from "@/lib/localGiftStore";
+import { prepareCloudResourceOnce } from "@/lib/mediaPreparation";
 
 const blessingColorSwatches = ["#c7608a", "#5f9d6d", "#c99542", "#6b8fc7", "#ffffff", "#43343c"];
 const maxBackgroundUploadSize = 8 * 1024 * 1024;
 const maxBackgroundUploadSizeLabel = "8MB";
 
+function mergeDraftWithLargeResources(savedDraft: GiftDraft | null, localDraft: GiftDraft) {
+  if (!savedDraft) {
+    return localDraft;
+  }
+
+  const mergedDraft = { ...savedDraft, ...localDraft };
+  if (savedDraft.audioUrl && (!localDraft.audioUrl || localDraft.audioUrl.startsWith("data:"))) {
+    mergedDraft.audioUrl = savedDraft.audioUrl;
+    mergedDraft.songSourceType = "upload";
+    mergedDraft.musicSelected = true;
+    mergedDraft.songTitle = savedDraft.songTitle;
+    mergedDraft.artist = savedDraft.artist;
+    mergedDraft.bgmPresetId = undefined;
+  }
+  if (savedDraft.backgroundImageUrl && (!localDraft.backgroundImageUrl || localDraft.backgroundImageUrl.startsWith("data:"))) {
+    mergedDraft.backgroundImageUrl = savedDraft.backgroundImageUrl;
+  }
+
+  return mergedDraft;
+}
+
 function canUseImageFile(file: File) {
-  // 移动端（微信/QQ/UC 内置浏览器）常不设 file.type，故优先看扩展名
+  // Mobile browsers sometimes omit file.type, so prefer extension checks.
   const normalizedName = file.name.toLowerCase();
   if (/\.(png|jpe?g|gif|webp|bmp|heic|heif|svg)$/.test(normalizedName)) {
     return true;
   }
-  // 有 MIME type 则按 type 匹配
+  // Otherwise use MIME type when available.
   if (file.type && file.type.startsWith("image/")) {
     return true;
   }
-  // type 为空但 size>0 —— 大概率是图片（移动端图库选择场景），放行
-  // accept="image/*" 已做第一层过滤
+  // Empty MIME with a non-empty file is common for mobile image pickers.
   if (!file.type && file.size > 0) {
     return true;
   }
@@ -36,6 +57,7 @@ export default function ContentPage() {
   const router = useRouter();
   const [draft, setDraft] = useState<GiftDraft>(getDraft());
   const [imageMessage, setImageMessage] = useState("");
+  const [imagePreparing, setImagePreparing] = useState(false);
   const [imageFileName, setImageFileName] = useState("");
   const [colorMessage, setColorMessage] = useState("");
   const colorInputRef = useRef<HTMLInputElement | null>(null);
@@ -46,9 +68,13 @@ export default function ContentPage() {
       return;
     }
 
-    // 同步读 localStorage，立刻拿到 draft（含上传的图片/音频 data URL）
     const baseDraft = getDraft();
     setDraft(baseDraft);
+    getLocalDraft()
+      .then((savedDraft) => {
+        setDraft(mergeDraftWithLargeResources(savedDraft, getDraft()));
+      })
+      .catch(() => undefined);
   }, [router]);
 
   function update(next: Partial<GiftDraft>) {
@@ -64,7 +90,7 @@ export default function ContentPage() {
     }
     startCreationFlow();
     setDraft(merged);
-    // 同步写入 localStorage
+    // Persist draft to both localStorage and IndexedDB.
     saveDraft(merged);
     saveLocalDraft(merged).catch(() => undefined);
   }
@@ -84,16 +110,23 @@ export default function ContentPage() {
       return;
     }
 
-    setImageMessage("正在压缩图片...");
+    setImageMessage("正在准备图片...");
+    setImagePreparing(true);
 
     try {
-      const backgroundImageUrl = await compressImage(file, 800, 0.75);
-      update({ backgroundImageUrl, backgroundPositionX: 50, backgroundPositionY: 50, backgroundScale: 100 });
+      const localBackgroundImageUrl = await compressImage(file, 640, 0.66);
+      update({ backgroundImageUrl: localBackgroundImageUrl, backgroundPositionX: 50, backgroundPositionY: 50, backgroundScale: 100 });
       setImageFileName(file.name);
-      setImageMessage("背景图片已保存到礼物草稿。");
+      setImageMessage("正在准备图片...");
+
+      const cloudBackgroundImageUrl = await prepareCloudResourceOnce(localBackgroundImageUrl, "image");
+      update({ backgroundImageUrl: cloudBackgroundImageUrl, backgroundPositionX: 50, backgroundPositionY: 50, backgroundScale: 100 });
+      setImageMessage("图片已准备好，生成链接时会更快。");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "未知错误";
-      setImageMessage(`图片读取失败（${msg}），请重新选择一张 ${maxBackgroundUploadSizeLabel} 以内的常见图片格式。`);
+      setImageMessage(`图片准备失败：${msg}。请重新选择 ${maxBackgroundUploadSizeLabel} 以内的常见图片格式，或稍后再试。`);
+    } finally {
+      setImagePreparing(false);
     }
   }
 
@@ -150,7 +183,7 @@ export default function ContentPage() {
                 }}
                 type="file"
               />
-              <span className="upload-image-glyph" aria-hidden="true">▢</span>
+              <span className="upload-image-glyph" aria-hidden="true">+</span>
               <span className="upload-image-label">{imageFileName || "点击上传背景图片"}</span>
             </label>
             <p className="hint">可上传 {maxBackgroundUploadSizeLabel} 以内图片；不上传时默认使用当前主题背景。</p>
@@ -348,7 +381,15 @@ export default function ContentPage() {
             <Link className="secondary-btn" href="/create/song">
               上一步
             </Link>
-            <Link className="primary-btn" href="/create/preview">
+            <Link
+              className="primary-btn"
+              href="/create/preview"
+              onClick={() => {
+                if (imagePreparing) {
+                  setImageMessage("图片正在准备，稍后会自动用于礼物。");
+                }
+              }}
+            >
               预览礼物
             </Link>
           </div>

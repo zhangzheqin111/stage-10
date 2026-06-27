@@ -1,10 +1,28 @@
-import { GiftDraft } from "./gift";
+﻿import { GiftDraft } from "./gift";
 
 export type CloudGiftResult =
   | { ok: true; gift: GiftDraft }
   | { ok: false; reason: "unconfigured" | "missing" | "error"; message: string };
 
-async function uploadDataUrl(dataUrl: string, kind: "image" | "audio") {
+export class CloudGiftSaveError extends Error {
+  phase: "upload" | "save";
+  status?: number;
+
+  constructor(message: string, phase: "upload" | "save", status?: number) {
+    super(message);
+    this.name = "CloudGiftSaveError";
+    this.phase = phase;
+    this.status = status;
+  }
+}
+
+export type CloudGiftSaveProgress = "upload-audio" | "upload-image" | "save-gift";
+
+function isDataUrl(value?: string) {
+  return Boolean(value?.startsWith("data:"));
+}
+
+export async function uploadCloudResource(dataUrl: string, kind: "image" | "audio") {
   if (!dataUrl.startsWith("data:")) {
     return dataUrl;
   }
@@ -17,19 +35,33 @@ async function uploadDataUrl(dataUrl: string, kind: "image" | "audio") {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(payload.message || "上传资源失败。");
+    throw new CloudGiftSaveError(payload.message || "礼物还没有准备好。", "upload", response.status);
   }
 
   return String(payload.url);
 }
 
-export async function saveCloudGift(draft: GiftDraft) {
-  const [audioUrl, backgroundImageUrl] = await Promise.all([
-    draft.audioUrl ? uploadDataUrl(draft.audioUrl, "audio") : Promise.resolve(undefined),
-    draft.backgroundImageUrl ? uploadDataUrl(draft.backgroundImageUrl, "image") : Promise.resolve(undefined)
-  ]);
+export async function saveCloudGift(draft: GiftDraft, onProgress?: (progress: CloudGiftSaveProgress) => void) {
+  let audioUrl: string | undefined;
+  let backgroundImageUrl: string | undefined;
+
+  if (draft.audioUrl) {
+    if (isDataUrl(draft.audioUrl)) {
+      onProgress?.("upload-audio");
+    }
+    audioUrl = await uploadCloudResource(draft.audioUrl, "audio");
+  }
+
+  if (draft.backgroundImageUrl) {
+    if (isDataUrl(draft.backgroundImageUrl)) {
+      onProgress?.("upload-image");
+    }
+    backgroundImageUrl = await uploadCloudResource(draft.backgroundImageUrl, "image");
+  }
+
   const cloudGift = { ...draft, audioUrl, backgroundImageUrl };
 
+  onProgress?.("save-gift");
   const response = await fetch("/api/gifts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -38,7 +70,7 @@ export async function saveCloudGift(draft: GiftDraft) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(payload.message || "保存云端礼物失败。");
+    throw new CloudGiftSaveError(payload.message || "礼物链接生成失败。", "save", response.status);
   }
 
   return { id: String(payload.id), gift: payload.gift as GiftDraft };
@@ -53,12 +85,12 @@ export async function getCloudGift(id: string): Promise<CloudGiftResult> {
   }
 
   if (response.status === 404) {
-    return { ok: false, reason: "missing", message: payload.message || "没有找到云端礼物。" };
+    return { ok: false, reason: "missing", message: payload.message || "没有找到这份礼物。" };
   }
 
   if (response.status === 503) {
-    return { ok: false, reason: "unconfigured", message: payload.message || "云端分享未配置。" };
+    return { ok: false, reason: "unconfigured", message: payload.message || "分享服务还没有配置。" };
   }
 
-  return { ok: false, reason: "error", message: payload.message || "读取云端礼物失败。" };
+  return { ok: false, reason: "error", message: payload.message || "读取礼物失败。" };
 }

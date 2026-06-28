@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "validate:stage9": "node scripts/validate-stage9.mjs",
+    "validate:upload-policy": "node scripts/validate-upload-policy.mjs",
     "lint": "next lint"
   },
   "dependencies": {

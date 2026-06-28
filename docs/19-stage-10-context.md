@@ -217,6 +217,7 @@ Run before a handoff or snapshot:
 ```powershell
 npm.cmd run build
 npm.cmd run validate:stage9
+npm.cmd run validate:upload-policy
 ```
 
 For HTTPS:
@@ -245,7 +246,7 @@ Also verify:
   - camera permission and touch fallback.
 - Decide whether to deploy to Vercel or another HTTPS host for a more stable URL than quick tunnel.
 - If moving to formal production, confirm Supabase table policies, public bucket behavior, storage cleanup policy, and service-role env configuration.
-- Consider adding an automated upload-policy smoke script so `storage: "supabase"` is checked without manual curl.
+- Optionally run the explicit server-media fallback check with `STAGE10_CHECK_SERVER_FALLBACK=1` when the server was started with `BLOOMBEAT_SERVER_MEDIA_ENABLED=1`.
 
 ## Next Suggested Step
 

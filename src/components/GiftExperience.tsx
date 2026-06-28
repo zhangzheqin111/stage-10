@@ -400,6 +400,8 @@ export function GiftExperience({
   const lastCameraOpenRef = useRef<boolean | null>(null);
   const openCandidateRef = useRef<{ value: boolean; since: number } | null>(null);
   const gestureModeRef = useRef<GestureState["mode"]>("touch");
+  const cameraSlowHintTimerRef = useRef<number | null>(null);
+  const cameraFrameCheckTimerRef = useRef<number | null>(null);
 
   const theme = themes[gift.theme];
   const windOffset = gesture.windPower - 50;
@@ -428,6 +430,7 @@ export function GiftExperience({
       cameraStreamRef.current = null;
       handLandmarkerRef.current?.close();
       handLandmarkerRef.current = null;
+      clearCameraTimers();
       trailRef.current = [];
     },
     []
@@ -520,6 +523,57 @@ export function GiftExperience({
     updateGesture({ type: "clap", flowerColorIndex: gesture.flowerColorIndex + 1 });
   }
 
+  function clearCameraTimers() {
+    clearCameraSlowHint();
+    if (cameraFrameCheckTimerRef.current) {
+      window.clearTimeout(cameraFrameCheckTimerRef.current);
+      cameraFrameCheckTimerRef.current = null;
+    }
+  }
+
+  function clearCameraSlowHint() {
+    if (cameraSlowHintTimerRef.current) {
+      window.clearTimeout(cameraSlowHintTimerRef.current);
+      cameraSlowHintTimerRef.current = null;
+    }
+  }
+
+  function scheduleCameraSlowHint(message: string, delay = 4500) {
+    if (cameraSlowHintTimerRef.current) {
+      window.clearTimeout(cameraSlowHintTimerRef.current);
+    }
+    cameraSlowHintTimerRef.current = window.setTimeout(() => {
+      setCameraMessage(message);
+      cameraSlowHintTimerRef.current = null;
+    }, delay);
+  }
+
+  function attachCameraStreamToVideos(stream: MediaStream) {
+    [videoRef.current, guideVideoRef.current].forEach((video) => {
+      if (!video) {
+        return;
+      }
+      if (video.srcObject !== stream) {
+        video.srcObject = stream;
+      }
+      video.play().catch(() => undefined);
+    });
+  }
+
+  function scheduleCameraFrameCheck(stream: MediaStream) {
+    if (cameraFrameCheckTimerRef.current) {
+      window.clearTimeout(cameraFrameCheckTimerRef.current);
+    }
+    cameraFrameCheckTimerRef.current = window.setTimeout(() => {
+      attachCameraStreamToVideos(stream);
+      const video = videoRef.current ?? guideVideoRef.current;
+      if (video && (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0)) {
+        setCameraMessage("摄像头已授权，但画面还没出来。请再等几秒；如果一直灰屏，可以刷新页面或换系统浏览器打开。");
+      }
+      cameraFrameCheckTimerRef.current = null;
+    }, 3200);
+  }
+
   function stopHandDetection() {
     if (detectionFrameRef.current) {
       window.cancelAnimationFrame(detectionFrameRef.current);
@@ -531,6 +585,7 @@ export function GiftExperience({
     lastCameraOpenRef.current = null;
     openCandidateRef.current = null;
     pinchActiveRef.current = false;
+    clearCameraTimers();
     fusionModeRef.current = { mode: "primary", streak: 0 };
     lastHandSeenAtRef.current = 0;
     lastCameraControlRef.current = { height: gesture.plantHeight, wind: gesture.windPower, time: 0 };
@@ -545,6 +600,7 @@ export function GiftExperience({
     stopHandDetection();
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
     cameraStreamRef.current = null;
+    clearCameraTimers();
     setGuideMode("touch");
     setHandTrackingReady(false);
     setCameraStarting(false);
@@ -750,10 +806,10 @@ export function GiftExperience({
     const currentOpen = lastCameraOpenRef.current ?? gesture.flowerOpen;
     let nextOpen = currentOpen;
     const isMovingForHeightOrWind =
-      movedY > cfg.movePixelThreshold * 0.72 ||
-      movedX > cfg.movePixelThreshold * 0.72 ||
-      Math.abs(nextHeight - previousControl.height) > cfg.moveHeightDeltaThreshold * 0.55 ||
-      Math.abs(nextWind - previousControl.wind) > cfg.moveWindDeltaThreshold * 0.55;
+      movedY > cfg.movePixelThreshold ||
+      movedX > cfg.movePixelThreshold ||
+      Math.abs(nextHeight - previousControl.height) > cfg.moveHeightDeltaThreshold * 0.8 ||
+      Math.abs(nextWind - previousControl.wind) > cfg.moveWindDeltaThreshold * 0.8;
 
     if (isMovingForHeightOrWind) {
       openCandidateRef.current = null;
@@ -906,6 +962,7 @@ export function GiftExperience({
       updateGesture({ mode: "touch", type: "none" });
       setHasCameraAccess(false);
       setCameraStage("touch-fallback");
+      clearCameraTimers();
       return;
     }
 
@@ -917,6 +974,7 @@ export function GiftExperience({
       updateGesture({ mode: "touch", type: "none" });
       setHasCameraAccess(false);
       setCameraStage("touch-fallback");
+      clearCameraTimers();
       return;
     }
 
@@ -927,13 +985,16 @@ export function GiftExperience({
     cameraHeightOriginRef.current = null;
     fusionModeRef.current = { mode: "primary", streak: 0 };
     setCameraStage("requesting");
-    setCameraMessage("正在打开摄像头，请允许浏览器访问。");
+    setCameraMessage("正在打开摄像头，请允许浏览器访问。微信内置浏览器可能会慢一些。");
+    scheduleCameraSlowHint("摄像头启动可能需要十几秒，微信内置浏览器会更慢。请耐心等一下，也可以用右上角菜单换系统浏览器打开。");
 
     try {
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
       const stream = await requestCameraStream();
 
       cameraStreamRef.current = stream;
+      attachCameraStreamToVideos(stream);
+      scheduleCameraFrameCheck(stream);
       cameraStreamStartedAtRef.current = Date.now();
       firstFrameTimeRef.current = null;
       setFirstFrameLatency(null);
@@ -944,11 +1005,14 @@ export function GiftExperience({
       setGuideMode("camera");
       setGuideTutorialMode("gesture");
       setCameraStage("tracking-loading");
-      setCameraMessage("摄像头已开启，正在准备手势识别。");
+      setCameraMessage("摄像头已开启，正在准备手势识别。首次加载可能较慢，请稍等。");
+      scheduleCameraSlowHint("手势识别首次加载可能需要十几秒，微信内置浏览器会更慢。可以继续等待，或换系统浏览器打开。", 5000);
       setCameraStarting(false);
 
       try {
         await ensureHandLandmarker();
+        clearCameraSlowHint();
+        attachCameraStreamToVideos(stream);
         setHandTrackingReady(true);
         setCameraStage("tracking-ready");
         setCameraMessage("手势识别已开启；画面只在本机实时识别，不保存、不上传。");
@@ -964,8 +1028,9 @@ export function GiftExperience({
         setGuideTutorialMode("touch");
         setHandTrackingReady(false);
         setCameraStage("touch-fallback");
+        clearCameraTimers();
         updateGesture({ mode: "touch", type: "none" });
-        setCameraMessage("手势识别资源加载失败，已自动切换为触摸模式。");
+        setCameraMessage("手势识别资源加载失败，已自动切换为触摸模式。也可以刷新后换系统浏览器再试。");
       }
     } catch (error) {
       stopHandDetection();
@@ -979,6 +1044,7 @@ export function GiftExperience({
       setHandTrackingReady(false);
       setHasCameraAccess(false);
       setCameraStage("touch-fallback");
+      clearCameraTimers();
       updateGesture({ mode: "touch", type: "none" });
       setCameraMessage(`${getCameraErrorMessage(error)}你仍可以用触摸方式完成互动和分享。`);
     } finally {

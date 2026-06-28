@@ -53,8 +53,8 @@ export const defaultGestureConfig: GestureConfig = {
   windMaxStep: 24,
 
   openSpreadThreshold: 1.28,
-  openDebounceMs: 200,
-  openTransitionKeep: 0.7,
+  openDebounceMs: 120,
+  openTransitionKeep: 0.55,
 
   pinchTriggerRatio: 0.42,
   pinchReleaseRatio: 0.58,

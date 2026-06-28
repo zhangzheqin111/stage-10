@@ -32,7 +32,7 @@ function getPreparationStatus(draft: GiftDraft) {
 }
 
 const shareProgressMessage: Record<CloudGiftSaveProgress, string> = {
-  "upload-audio": "正在准备音乐...",
+  "upload-audio": "正在把音乐放进礼物链接...",
   "upload-image": "正在准备图片...",
   "save-gift": "正在生成礼物链接..."
 };
@@ -199,10 +199,10 @@ export default function PreviewPage() {
     setShareMessage(
       preparationError
         ? preparationError
-        : preparation.imagePreparing
-          ? "图片还在准备，完成后即可生成可转发链接。"
+          : preparation.imagePreparing
+            ? "图片还在准备，完成后即可生成可转发链接。"
           : preparation.musicPreparing
-            ? "音乐还在同步，但不影响先生成礼物链接。"
+            ? "音乐还在放进链接里，你可以先生成礼物链接。"
             : "默认名称来自编辑页昵称，也可以在这里修改。"
     );
     setShareCopied(false);
@@ -264,7 +264,7 @@ export default function PreviewPage() {
       const seconds = Math.max(1, Math.round((performance.now() - startedAt) / 1000));
       setShareMessage(
         pendingAudioDataUrl
-          ? `礼物链接已生成，用时约 ${seconds} 秒。音乐还在同步，完成后会自动补进这条链接。`
+          ? `礼物链接已生成，用时约 ${seconds} 秒。音乐还在放进这条链接里，完成后会自动更新。`
           : `礼物链接已生成，用时约 ${seconds} 秒，可以复制后发给朋友。`
       );
 
@@ -278,10 +278,10 @@ export default function PreviewPage() {
             return saveCloudGift(syncedDraft);
           })
           .then(() => {
-            setShareMessage("音乐已同步到礼物链接，可以直接转发。");
+            setShareMessage("音乐已放进礼物链接，可以直接转发。");
           })
           .catch(() => {
-            setShareMessage("礼物链接已生成，但音乐同步失败。可以稍后重试准备音乐，或更换一段更短的音频。");
+            setShareMessage("礼物链接已生成，但音乐暂时没放进去。可以稍后重试，或更换一段更短的音频。");
           });
       }
     } catch (error) {
@@ -397,7 +397,7 @@ export default function PreviewPage() {
             </label>
             <div className="share-readiness" aria-live="polite">
               <span>礼物内容已完成</span>
-              <span>{preparation.musicPreparing ? "音乐同步中，不阻塞生成" : "音乐已准备好"}</span>
+              <span>{preparation.musicPreparing ? "音乐处理中，可先生成链接" : "音乐已准备好"}</span>
               <span>{preparation.imagePreparing ? "图片准备中" : "图片已准备好"}</span>
             </div>
             {preparationError ? (
